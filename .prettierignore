@@ -1,0 +1,21 @@
+# .prettierignore
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+web-build/
+
+# Expo cache/config
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Other generated files or directories
+coverage/
+# Add any other files/folders you want Prettier to ignore
