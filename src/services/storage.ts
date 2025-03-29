@@ -1,128 +1,174 @@
+// src/services/storage.ts
 import { MMKV } from "react-native-mmkv";
+import uuid from "react-native-uuid";
 
-// --- Define Data Structures ---
-// Adjust these interfaces based on the actual data you need to save
+// --- Interfaces (WorkoutSet, WorkoutTemplate, CompletedWorkout remain the same) ---
+export interface WorkoutSet {
+  id: string;
+  reps: number;
+  weight: number;
+}
 
-// Example for a workout template created in CreateWorkoutScreen
 export interface WorkoutTemplate {
-  id: string; // Unique ID (e.g., timestamp or UUID)
+  id: string;
   name: string;
   type: string | null;
-  durationEstimate?: number; // Optional estimated duration
+  durationEstimate?: number;
   exercises: Array<{
-    id: string; // ID of the exercise from your master list
-    name: string; // Store name for display convenience
-    sets: Array<{
-      reps: number;
-      weight: number;
-    }>;
-
-    // Add any other template-specific details per exercise if needed (e.g., default sets/reps)
+    id: string;
+    name: string;
+    sets: WorkoutSet[];
   }>;
 }
 
-// Example for a completed workout instance
 export interface CompletedWorkout {
-  id: string; // Unique ID for this specific instance
-  templateId?: string; // Optional: Link to the template used
-  name: string; // Name at the time of completion
-  startTime: number; // Timestamp (Date.now())
-  endTime: number; // Timestamp
+  id: string;
+  templateId?: string;
+  name: string;
+  startTime: number;
+  endTime: number;
   durationSeconds: number;
   exercises: Array<{
     id: string;
     name: string;
-    sets: Array<{
-      reps: number;
-      weight: number;
-      // Add other set details: RPE, notes, etc.
-    }>;
+    sets: Array<{ reps: number; weight: number }>;
   }>;
-  // Add overall workout notes, volume, etc.
+}
+
+// --- NEW: Active Workout Session Interface ---
+export interface ActiveWorkoutSession {
+  startTime: number; // Original start time
+  accumulatedSeconds: number; // Time elapsed *before* the last pause
+  template: WorkoutTemplate | null; // The template being used (or null)
+  // Add more state if needed: currentExerciseIndex, currentSetIndex, performedSetsData
 }
 
 export const storage = new MMKV();
 
-// --- Define Storage Keys ---
+// --- Storage Keys ---
 const STORAGE_KEYS = {
   WORKOUT_TEMPLATES: "workoutTemplates",
   WORKOUT_HISTORY: "workoutHistory",
+  ACTIVE_WORKOUT_SESSION: "activeWorkoutSession", // New key
 };
 
-// --- Helper Functions ---
-
-// Generic function to get an array from storage
+// --- Helper Functions (getArray, saveArray remain the same) ---
 const getArray = <T>(key: string): T[] => {
   const jsonString = storage.getString(key);
   if (jsonString) {
     try {
       const data = JSON.parse(jsonString);
-      return Array.isArray(data) ? data : []; // Ensure it's an array
+      return Array.isArray(data) ? data : [];
     } catch (error) {
-      console.error(`Error parsing JSON for key "${key}":`, error);
-      return []; // Return empty array on error
+      console.error(`Error parsing JSON array for key "${key}":`, error);
+      return [];
     }
   }
-  return []; // Return empty array if key doesn't exist
+  return [];
 };
 
-// Generic function to save an array to storage
 const saveArray = <T>(key: string, data: T[]): void => {
   try {
     const jsonString = JSON.stringify(data);
     storage.set(key, jsonString);
   } catch (error) {
-    console.error(`Error stringifying JSON for key "${key}":`, error);
+    console.error(`Error stringifying JSON array for key "${key}":`, error);
   }
 };
 
-// --- Workout Template Functions ---
-
+// --- Workout Template Functions (remain the same) ---
 export const getAllWorkoutTemplates = (): WorkoutTemplate[] => {
   return getArray<WorkoutTemplate>(STORAGE_KEYS.WORKOUT_TEMPLATES);
 };
-
 export const saveWorkoutTemplate = (newTemplate: WorkoutTemplate): void => {
   const templates = getAllWorkoutTemplates();
-  // Check if template with same ID already exists to prevent duplicates
-  // Or implement update logic if needed
-  if (!templates.some(t => t.id === newTemplate.id)) {
+  const index = templates.findIndex(t => t.id === newTemplate.id);
+  if (index === -1) {
     templates.push(newTemplate);
-    saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
   } else {
-    console.warn(
-      `Template with ID ${newTemplate.id} already exists. Not saving.`
-    );
-    // Optionally implement update logic here:
-    // const updatedTemplates = templates.map(t => t.id === newTemplate.id ? newTemplate : t);
-    // saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, updatedTemplates);
+    templates[index] = newTemplate; // Simple overwrite update
   }
+  saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
 };
-
 export const deleteWorkoutTemplate = (templateId: string): void => {
   let templates = getAllWorkoutTemplates();
   templates = templates.filter(t => t.id !== templateId);
   saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
 };
 
-// --- Workout History Functions ---
-
+// --- Workout History Functions (remain the same) ---
 export const getWorkoutHistory = (): CompletedWorkout[] => {
-  // Optionally sort by date here
   return getArray<CompletedWorkout>(STORAGE_KEYS.WORKOUT_HISTORY).sort(
-    (a, b) => b.startTime - a.startTime // Sort descending by start time
+    (a, b) => b.startTime - a.startTime
   );
 };
-
 export const saveCompletedWorkout = (workout: CompletedWorkout): void => {
   const history = getWorkoutHistory();
-  // Add the new workout to the beginning or end
-  history.unshift(workout); // Add to beginning for recent first
+  history.unshift(workout);
   saveArray(STORAGE_KEYS.WORKOUT_HISTORY, history);
 };
-
 export const clearWorkoutHistory = (): void => {
   storage.delete(STORAGE_KEYS.WORKOUT_HISTORY);
 };
 
-// --- Add functions for other data as needed ---
+// --- NEW: Active Workout Session Functions ---
+
+/**
+ * Saves the current active workout session state to storage.
+ * @param session - The ActiveWorkoutSession object or null to clear.
+ */
+export const saveActiveWorkoutSession = (
+  session: ActiveWorkoutSession | null
+): void => {
+  try {
+    if (session) {
+      const jsonString = JSON.stringify(session);
+      storage.set(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION, jsonString);
+      console.log("Active session saved.");
+    } else {
+      storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
+      console.log("Active session cleared.");
+    }
+  } catch (error) {
+    console.error("Error saving active workout session:", error);
+  }
+};
+
+/**
+ * Retrieves the saved active workout session from storage.
+ * @returns The ActiveWorkoutSession object or null if none exists/error occurs.
+ */
+export const getActiveWorkoutSession = (): ActiveWorkoutSession | null => {
+  const jsonString = storage.getString(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
+  if (jsonString) {
+    try {
+      const session = JSON.parse(jsonString) as ActiveWorkoutSession;
+      // Basic validation
+      if (
+        session &&
+        typeof session.startTime === "number" &&
+        typeof session.accumulatedSeconds === "number"
+      ) {
+        console.log("Active session retrieved.");
+        return session;
+      } else {
+        console.warn("Invalid active session data found in storage.");
+        storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION); // Clean up invalid data
+        return null;
+      }
+    } catch (error) {
+      console.error("Error parsing active workout session:", error);
+      storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION); // Clean up invalid data
+      return null;
+    }
+  }
+  return null; // No active session found
+};
+
+/**
+ * Clears the saved active workout session from storage.
+ */
+export const clearActiveWorkoutSession = (): void => {
+  storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
+  console.log("Active session explicitly cleared.");
+};

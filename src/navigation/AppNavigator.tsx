@@ -14,6 +14,7 @@ import CreateWorkoutScreen from "@/screens/CreateWorkoutScreen"; // <-- Import n
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/theme/ThemeContext";
 import { NavigatorScreenParams } from "@react-navigation/native";
+import ActiveWorkoutScreen from "@/screens/ActiveWorkoutScreen";
 
 // Define ParamList for the Stack Navigator
 export type RootStackParamList = {
@@ -140,6 +141,16 @@ const AppNavigator = () => {
         options={{
           title: "Create Workout",
           // Header right button is set dynamically within the screen component
+        }}
+      />
+
+      <Stack.Screen
+        name="ActiveWorkout"
+        component={ActiveWorkoutScreen}
+        options={{
+          title: "Workout Session",
+          gestureEnabled: false,
+          headerLeft: () => null,
         }}
       />
 

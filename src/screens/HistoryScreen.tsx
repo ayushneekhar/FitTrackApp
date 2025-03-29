@@ -1,17 +1,46 @@
-// src/screens/HistoryScreen.tsx
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+// src/screens/HistoryScreen.tsx (Main Tab)
+import React, { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  Alert, // Import Alert
+} from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import Card from "@/components/Card";
 import WorkoutListItem from "@/components/WorkoutListItem";
-// Import navigation types if needed
-// import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-// import { BottomTabParamList } from '@/navigation/BottomTabNavigator';
-
-// type Props = BottomTabScreenProps<BottomTabParamList, 'HistoryTab'>;
+import { useFocusEffect } from "@react-navigation/native";
+import { getWorkoutHistory, CompletedWorkout } from "@/services/storage";
+import { formatDuration, formatRelativeDate } from "@/utils/formatters";
 
 const HistoryScreen: React.FC = () => {
   const { colors } = useTheme();
+  const [history, setHistory] = useState<CompletedWorkout[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadHistory = useCallback(() => {
+    setIsLoading(true);
+    try {
+      const fetchedHistory = getWorkoutHistory();
+      setHistory(fetchedHistory);
+    } catch (error) {
+      console.error("Error loading workout history:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(loadHistory);
+
+  const handleViewWorkout = (workoutId: string) => {
+    console.log("Navigate to view completed workout:", workoutId);
+    Alert.alert(
+      "Not Implemented",
+      "Viewing completed workout details is not yet implemented."
+    );
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -20,13 +49,19 @@ const HistoryScreen: React.FC = () => {
     },
     contentContainer: {
       padding: 16,
-      paddingTop: 40, // Add padding if no header/top tab bar
+      paddingTop: 20, // Adjust padding if needed
+      flexGrow: 1,
     },
     title: {
-      fontSize: 24, // Larger title for main screen
+      fontSize: 24,
       fontWeight: "bold",
       color: colors.text,
       marginBottom: 20,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
     },
     placeholderText: {
       fontSize: 16,
@@ -36,18 +71,13 @@ const HistoryScreen: React.FC = () => {
     },
   });
 
-  // Dummy data - same as profile history for example
-  const history = [
-    { id: "h1", name: "Upper Body", date: "Yesterday", duration: "45 min" },
-    { id: "h2", name: "Leg Day", date: "3 days ago", duration: "60 min" },
-    { id: "h3", name: "Full Body", date: "5 days ago", duration: "75 min" },
-    {
-      id: "h4",
-      name: "Cardio Express",
-      date: "Last Monday",
-      duration: "30 min",
-    },
-  ];
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -56,15 +86,15 @@ const HistoryScreen: React.FC = () => {
     >
       <Text style={styles.title}>Completed Workouts</Text>
       {history.length > 0 ? (
-        <Card style={{ padding: 0 }}>
+        <Card style={{ padding: 0, marginHorizontal: 0 }}>
           {history.map((item, index) => (
             <WorkoutListItem
               key={item.id}
               title={item.name}
-              details={`${item.date} • ${item.duration}`}
+              details={`${formatRelativeDate(item.startTime)} • ${formatDuration(item.durationSeconds)}`}
               actionText="View"
-              onPress={() => console.log("View history item:", item.name)}
-              iconName="check-circle-outline" // Different icon maybe
+              onPress={() => handleViewWorkout(item.id)}
+              iconName="check-circle-outline"
               style={{
                 borderBottomWidth:
                   index === history.length - 1 ? 0 : StyleSheet.hairlineWidth,
