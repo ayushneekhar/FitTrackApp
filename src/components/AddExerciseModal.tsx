@@ -19,7 +19,7 @@ import Checkbox from "expo-checkbox"; // Assuming expo-checkbox is installed or 
 export interface Exercise {
   id: string;
   name: string;
-  category: string; // e.g., 'Chest', 'Back', 'Legs'
+  category: Categories; // e.g., 'Chest', 'Back', 'Legs'
   type: string; // e.g., 'Barbell', 'Dumbbell', 'Bodyweight'
 }
 
@@ -30,16 +30,16 @@ interface AddExerciseModalProps {
   allExercises: Exercise[]; // Pass the full list of available exercises
 }
 
-const categories = [
-  "Chest",
-  "Back",
-  "Legs",
-  "Shoulders",
-  "Arms",
-  "Core",
-  "Cardio",
-  "Other", // Add more as needed
-];
+export const enum Categories {
+  Chest = "Chest",
+  Back = "Back",
+  Legs = "Legs",
+  Shoulders = "Shoulders",
+  Arms = "Arms",
+  Core = "Core",
+  Cardio = "Cardio",
+  Other = "Other",
+}
 
 const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
   visible,
@@ -50,7 +50,7 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
   const { colors } = useTheme();
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>(
-    categories[0]
+    Categories.Chest
   );
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<Set<string>>(
     new Set()
@@ -85,7 +85,7 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
   const handleClose = () => {
     // Reset state on close
     setSearchText("");
-    setSelectedCategory(categories[0]);
+    setSelectedCategory(Categories.Chest);
     setSelectedExerciseIds(new Set());
     onClose();
   };
@@ -164,10 +164,10 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
       marginBottom: 15,
     },
     categoryButton: {
+      marginRight: 8,
       paddingVertical: 8,
       paddingHorizontal: 16,
-      borderRadius: 16,
-      marginRight: 8,
+      borderRadius: 24,
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
@@ -186,7 +186,7 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
     },
     exerciseList: {
       // Max height for the list itself if needed
-      // maxHeight: Dimensions.get('window').height * 0.4,
+      maxHeight: Dimensions.get("window").height * 0.4,
     },
     exerciseItem: {
       flexDirection: "row",
@@ -285,25 +285,27 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
             showsHorizontalScrollIndicator={false}
             style={styles.categoryScrollView}
           >
-            {categories.map(cat => (
-              <TouchableOpacity
-                key={cat}
-                style={[
-                  styles.categoryButton,
-                  selectedCategory === cat && styles.categoryButtonSelected,
-                ]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text
+            {(Object.keys(Categories) as Array<keyof typeof Categories>).map(
+              cat => (
+                <TouchableOpacity
+                  key={cat}
                   style={[
-                    styles.categoryText,
-                    selectedCategory === cat && styles.categoryTextSelected,
+                    styles.categoryButton,
+                    selectedCategory === cat && styles.categoryButtonSelected,
                   ]}
+                  onPress={() => setSelectedCategory(cat)}
                 >
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedCategory === cat && styles.categoryTextSelected,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
           </ScrollView>
 
           {/* Exercise List */}

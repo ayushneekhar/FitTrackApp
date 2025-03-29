@@ -9,6 +9,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppNavigator from "@/navigation/AppNavigator"; // Using path alias
 import { StatusBar } from "expo-status-bar";
 import { ThemeProvider, useTheme } from "@/theme/ThemeContext"; // Using path alias
+import { MMKV } from "react-native-mmkv";
+
+export const mmkv = new MMKV();
 
 // Component to bridge ThemeContext and NavigationContainer theme
 const ThemedApp = () => {

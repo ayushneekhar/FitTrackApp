@@ -1,123 +1,119 @@
 // src/navigation/BottomTabNavigator.tsx
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { View, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import { View, StyleSheet, Platform, TouchableOpacity } from "react-native"; // Removed TouchableOpacity for now
 import DashboardTopTabNavigator from "./DashboardTopTabNavigator";
 import HistoryScreen from "@/screens/HistoryScreen";
-import AddWorkoutScreen from "@/screens/AddWorkoutScreen";
+// import AddWorkoutScreen from "@/screens/AddWorkoutScreen"; // We might not need this screen component anymore
 import ProfileTopTabNavigator from "./ProfileTopTabNavigator";
 import DashboardAnalyticsScreen from "@/screens/Dashboard/DashboardAnalyticsScreen";
-import Icon from "@expo/vector-icons/MaterialCommunityIcons"; // Use Expo's version
-import { useTheme } from "@/theme/ThemeContext"; // Import useTheme
+import Icon from "@expo/vector-icons/MaterialCommunityIcons";
+import { useTheme } from "@/theme/ThemeContext";
+import { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs/lib/typescript/src/types"; // Import type
 
-// Define ParamList for type safety (adjust screen names if needed)
 export type BottomTabParamList = {
-  DashboardTab: undefined; // Assuming DashboardTopTabNavigator handles its own params
+  DashboardTab: undefined;
   HistoryTab: undefined;
-  AddWorkoutTab: undefined; // This screen might not actually render content
+  // AddWorkoutTab: undefined; // Keep for navigation target, but component might be dummy
+  // --- OR --- Define a placeholder screen if needed, but navigation is handled by listener
+  AddWorkoutPlaceholder: undefined;
   AnalyticsTab: undefined;
-  ProfileTab: undefined; // Assuming ProfileTopTabNavigator handles its own params
+  ProfileTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
-// Custom component for the center Add button
-interface CustomTabBarButtonProps {
-  children: React.ReactNode;
-  onPress?: () => void; // Make onPress optional or handle appropriately
-}
-
-const CustomTabBarButton: React.FC<CustomTabBarButtonProps> = ({
-  children,
-  onPress,
-}) => {
-  const { colors } = useTheme(); // Get colors from theme
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.customButtonContainer,
-        {
-          // Add shadow based on theme if desired
-          shadowColor: colors.primary, // Use theme color for shadow
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View
-        style={[
-          styles.customButton,
-          {
-            backgroundColor: colors.primary, // Use theme color
-          },
-        ]}
-      >
-        {children}
-      </View>
-    </TouchableOpacity>
-  );
-};
+// Dummy component if AddWorkoutScreen is no longer needed
+const DummyScreen = () => null;
 
 const BottomTabNavigator = () => {
-  const { colors } = useTheme(); // Get colors from theme
+  const { colors } = useTheme();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.tabActive, // Use theme color
-        tabBarInactiveTintColor: colors.tabInactive, // Use theme color
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: colors.card, // Use card or background color
-          borderTopColor: colors.border, // Use theme border color
-          height: Platform.OS === "ios" ? 80 : 60, // Adjust height
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          height: Platform.OS === "ios" ? 80 : 60,
           paddingBottom: Platform.OS === "ios" ? 20 : 5,
           paddingTop: 5,
+          // Add shadow for the elevated button effect if needed
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: -3 }, // Shadow upwards
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 5, // For Android elevation
         },
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: React.ComponentProps<typeof Icon>["name"] = "help"; // Default icon
+          let iconName: React.ComponentProps<typeof Icon>["name"] = "help";
           size = focused ? 26 : 22;
 
-          switch (route.name) {
-            case "DashboardTab":
-              iconName = focused ? "view-dashboard" : "view-dashboard-outline";
-              break;
-            case "HistoryTab":
-              iconName = "history"; // Same icon for focused/unfocused
-              break;
-            case "AddWorkoutTab":
-              iconName = "plus";
-              color = colors.buttonText; // Use button text color from theme
-              size = 30;
-              break;
-            case "AnalyticsTab":
-              iconName = focused ? "chart-line" : "chart-line";
-              break;
-            case "ProfileTab":
-              iconName = focused ? "account-circle" : "account-circle-outline";
-              break;
+          // --- Adjust Icon Logic for the Center Button ---
+          if (route.name === "AddWorkoutPlaceholder") {
+            iconName = "plus";
+            // Style the icon itself within tabBarButton options below
+          } else if (route.name === "DashboardTab") {
+            iconName = focused ? "view-dashboard" : "view-dashboard-outline";
+          } else if (route.name === "HistoryTab") {
+            iconName = "history";
+          } else if (route.name === "AnalyticsTab") {
+            iconName = focused ? "chart-line" : "chart-line";
+          } else if (route.name === "ProfileTab") {
+            iconName = focused ? "account-circle" : "account-circle-outline";
+          }
+
+          // Don't render the icon here for the center button, it's handled in tabBarButton
+          if (route.name === "AddWorkoutPlaceholder") {
+            return null;
           }
 
           return <Icon name={iconName} size={size} color={color} />;
         },
-        tabBarLabel: () => null, // Keep labels hidden
+        tabBarLabel: () => null,
       })}
     >
       {/* Define Screens */}
       <Tab.Screen name="DashboardTab" component={DashboardTopTabNavigator} />
       <Tab.Screen name="HistoryTab" component={HistoryScreen} />
       <Tab.Screen
-        name="AddWorkoutTab"
-        component={AddWorkoutScreen} // Still needs a component, even if placeholder
+        name="AddWorkoutPlaceholder" // Use a placeholder name
+        component={DummyScreen} // Use a dummy component that renders nothing
         options={{
-          tabBarButton: props => (
-            <CustomTabBarButton {...props}>
-              {/* Render the icon inside the custom button */}
-              <Icon name="plus" size={30} color={colors.buttonText} />
-            </CustomTabBarButton>
+          // --- Style the Button Itself ---
+          tabBarButton: (props: BottomTabBarButtonProps) => (
+            <TouchableOpacity
+              {...props} // Pass down props like onPress, accessibilityRole etc.
+              style={[
+                styles.customButtonContainer,
+                { shadowColor: colors.primary },
+              ]}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.customButton,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                {/* Render the icon inside the custom button */}
+                <Icon name="plus" size={30} color={colors.buttonText} />
+              </View>
+            </TouchableOpacity>
           ),
         }}
+        // --- Add Listener to Handle Navigation ---
+        listeners={({ navigation }) => ({
+          tabPress: e => {
+            // Prevent default action (which would navigate to DummyScreen)
+            e.preventDefault();
+            // Navigate to the actual screen you want
+            navigation.navigate("NewWorkout"); // Or 'CreateWorkout' if preferred
+          },
+        })}
       />
       <Tab.Screen name="AnalyticsTab" component={DashboardAnalyticsScreen} />
       <Tab.Screen name="ProfileTab" component={ProfileTopTabNavigator} />
@@ -125,23 +121,28 @@ const BottomTabNavigator = () => {
   );
 };
 
+// --- Keep Styles for the Custom Button ---
 const styles = StyleSheet.create({
   customButtonContainer: {
-    top: -20,
-    justifyContent: "center",
-    alignItems: "center",
-    // Shadow properties (consider platform differences)
+    // Position it to overlap the tab bar
+    position: "absolute",
+    bottom: 15, // Adjust as needed based on tab bar height
+    left: "50%",
+    transform: [{ translateX: -30 }], // Center the 60-width button
+    zIndex: 1, // Ensure it's above the tab bar visually
+    // Shadow properties
+    // shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.25,
     shadowRadius: 3.5,
-    elevation: 5, // for Android
+    elevation: 5,
   },
   customButton: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    justifyContent: "center", // Center icon inside
-    alignItems: "center", // Center icon inside
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 

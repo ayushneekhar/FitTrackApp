@@ -15,6 +15,16 @@ import { RootStackParamList } from "@/navigation/AppNavigator"; // Adjust if Cre
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import AddExerciseModal, { Exercise } from "@/components/AddExerciseModal"; // Import the modal and Exercise type
 import Card from "@/components/Card"; // Reusing Card component
+import { saveWorkoutTemplate } from "@/services/storage";
+import {
+  armsExercises,
+  backExercises,
+  cardioExercises,
+  chestExercises,
+  coreExercises,
+  legsExercises,
+  shouldersExercises,
+} from "@/constants/exercises";
 
 // Define navigation props type
 // Assuming CreateWorkoutScreen is pushed onto the RootStack
@@ -22,27 +32,13 @@ type Props = NativeStackScreenProps<RootStackParamList, "CreateWorkout">;
 
 // Dummy data for all available exercises (replace with actual data source)
 const DUMMY_EXERCISES: Exercise[] = [
-  { id: "ex1", name: "Bench Press", category: "Chest", type: "Barbell" },
-  {
-    id: "ex2",
-    name: "Incline Bench Press",
-    category: "Chest",
-    type: "Barbell",
-  },
-  {
-    id: "ex3",
-    name: "Decline Bench Press",
-    category: "Chest",
-    type: "Barbell",
-  },
-  { id: "ex4", name: "Chest Fly", category: "Chest", type: "Dumbbell" },
-  { id: "ex5", name: "Cable Crossover", category: "Chest", type: "Cable" },
-  { id: "ex6", name: "Push-Up", category: "Chest", type: "Bodyweight" },
-  { id: "ex7", name: "Pull-Up", category: "Back", type: "Bodyweight" },
-  { id: "ex8", name: "Barbell Row", category: "Back", type: "Barbell" },
-  { id: "ex9", name: "Squat", category: "Legs", type: "Barbell" },
-  { id: "ex10", name: "Deadlift", category: "Legs", type: "Barbell" },
-  // ... add many more exercises
+  ...chestExercises,
+  ...backExercises,
+  ...legsExercises,
+  ...cardioExercises,
+  ...armsExercises,
+  ...shouldersExercises,
+  ...coreExercises,
 ];
 
 const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
@@ -64,6 +60,17 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       type: workoutType,
       duration: duration,
       exercises: addedExercises,
+    });
+    saveWorkoutTemplate({
+      id: Date.now().toString(),
+      name: workoutName,
+      type: workoutType,
+      durationEstimate: duration ? parseInt(duration, 10) : undefined,
+      exercises: addedExercises.map(ex => ({
+        id: ex.id,
+        name: ex.name,
+        // Add any other details you need for the template
+      })),
     });
     // Add logic to save the workout (e.g., to state management, API, AsyncStorage)
     navigation.goBack(); // Go back after saving
@@ -194,6 +201,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       justifyContent: "center",
       backgroundColor: colors.card,
       paddingVertical: 12,
+      paddingHorizontal: 16,
       borderRadius: 8,
       borderWidth: 1,
       borderColor: colors.border,

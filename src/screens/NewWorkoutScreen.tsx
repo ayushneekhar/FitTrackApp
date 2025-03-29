@@ -47,10 +47,7 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   });
 
   // Dummy data for templates
-  const templates = [
-    { id: "t1", name: "Quick Upper Body", exercises: 5 },
-    { id: "t2", name: "Leg Burner", exercises: 7 },
-  ];
+  const templates = [];
 
   const startEmptyWorkout = () => {
     console.log("Starting empty workout...");
@@ -62,6 +59,10 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     console.log("Starting workout from template:", templateName);
     // Navigate to active workout screen with template data
     // navigation.navigate('ActiveWorkout', { templateId: templateId });
+  };
+
+  const createWorkout = () => {
+    navigation.navigate("CreateWorkout");
   };
 
   return (
@@ -76,7 +77,6 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       </TouchableOpacity>
 
       <Text style={[styles.title, { marginTop: 30 }]}>Or From Template</Text>
-
       {templates.length > 0 ? (
         <Card style={{ padding: 0 }}>
           {templates.map((template, index) => (
@@ -100,6 +100,9 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={{ color: colors.textSecondary, textAlign: "center" }}>
             No templates found. Create one in the Workouts tab!
           </Text>
+          <TouchableOpacity style={styles.button} onPress={createWorkout}>
+            <Text style={styles.buttonText}>Create Workout</Text>
+          </TouchableOpacity>
         </Card>
       )}
     </ScrollView>

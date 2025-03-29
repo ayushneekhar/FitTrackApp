@@ -19,15 +19,6 @@ type Props = CompositeScreenProps<
 const AddWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
 
-  // Immediately navigate to the "NewWorkout" screen when this tab is focused
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      navigation.navigate("NewWorkout"); // Navigate to the actual screen
-    });
-
-    return unsubscribe; // Clean up listener on unmount
-  }, [navigation]);
-
   const styles = StyleSheet.create({
     container: {
       flex: 1,
