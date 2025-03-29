@@ -536,6 +536,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     // All Exercises Section
     allExercisesSection: {
       paddingTop: 16, // No top padding needed if header has border
+      rowGap: 8,
     },
     allExercisesTitle: {
       fontSize: 18,
@@ -548,10 +549,11 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      padding: 16,
+      marginHorizontal: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
     },
     exerciseListItemActive: {
       backgroundColor: colors.progressBarBackground, // Highlight active item
@@ -579,6 +581,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       fontWeight: "bold",
       fontSize: 14,
     },
+    decreaseReps: { left: 148, zIndex: 2, position: "absolute" },
+    increaseReps: { left: 56, zIndex: 2, position: "absolute" },
   });
 
   // --- Render ---
@@ -685,6 +689,18 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
             >
               <Text style={styles.setNumberText}>{index + 1}</Text>
               {/* Reps Input */}
+              <TouchableOpacity
+                onPress={() =>
+                  handleRepsChange(index, (set.reps + 1).toString())
+                }
+                style={styles.decreaseReps}
+              >
+                <Icon
+                  name="chevron-up"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
               <View style={styles.setInputContainer}>
                 <TextInput
                   style={styles.setInput}
@@ -695,6 +711,19 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
                   editable={!set.completed} // Disable editing if completed
                 />
               </View>
+
+              <TouchableOpacity
+                onPress={() =>
+                  handleRepsChange(index, (set.reps - 1).toString())
+                }
+                style={styles.increaseReps}
+              >
+                <Icon
+                  name="chevron-down"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
               {/* Weight Input */}
               <View style={styles.setInputContainer}>
                 <TextInput
@@ -739,28 +768,26 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       {/* All Exercises List */}
       <View style={styles.allExercisesSection}>
         <Text style={styles.allExercisesTitle}>All Exercises</Text>
-        <Card style={{ padding: 0, marginHorizontal: 16 }}>
-          {workoutExercises.map((exercise, index) => (
-            <TouchableOpacity
-              key={exercise.id}
-              style={[
-                styles.exerciseListItem,
-                index === currentExerciseIndex && styles.exerciseListItemActive, // Highlight current
-              ]}
-              onPress={() => handleSelectExercise(index)}
-            >
-              <Text style={styles.exerciseListName}>{exercise.name}</Text>
-              <Text style={styles.exerciseListSets}>
-                {exercise.sets.length} sets
-              </Text>
-            </TouchableOpacity>
-          ))}
-          {workoutExercises.length === 0 && (
-            <Text style={[styles.placeholderText, { padding: 15 }]}>
-              Add exercises to begin.
+        {workoutExercises.map((exercise, index) => (
+          <TouchableOpacity
+            key={exercise.id}
+            style={[
+              styles.exerciseListItem,
+              index === currentExerciseIndex && styles.exerciseListItemActive, // Highlight current
+            ]}
+            onPress={() => handleSelectExercise(index)}
+          >
+            <Text style={styles.exerciseListName}>{exercise.name}</Text>
+            <Text style={styles.exerciseListSets}>
+              {exercise.sets.length} sets
             </Text>
-          )}
-        </Card>
+          </TouchableOpacity>
+        ))}
+        {workoutExercises.length === 0 && (
+          <Text style={[styles.placeholderText, { padding: 15 }]}>
+            Add exercises to begin.
+          </Text>
+        )}
       </View>
     </ScrollView>
   );
