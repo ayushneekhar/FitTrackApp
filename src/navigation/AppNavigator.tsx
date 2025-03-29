@@ -15,6 +15,7 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/theme/ThemeContext";
 import { NavigatorScreenParams } from "@react-navigation/native";
 import ActiveWorkoutScreen from "@/screens/ActiveWorkoutScreen";
+import EditWorkoutScreen from "@/screens/EditWokoutScreen";
 
 // Define ParamList for the Stack Navigator
 export type RootStackParamList = {
@@ -151,6 +152,14 @@ const AppNavigator = () => {
           title: "Workout Session",
           gestureEnabled: false,
           headerLeft: () => null,
+        }}
+      />
+
+      <Stack.Screen
+        name="EditWorkout"
+        component={EditWorkoutScreen}
+        options={{
+          title: "Edit Workout",
         }}
       />
 

@@ -31,7 +31,11 @@ export interface CompletedWorkout {
   exercises: Array<{
     id: string;
     name: string;
-    sets: Array<{ reps: number; weight: number }>;
+    sets: Array<{
+      reps: number;
+      weight: number;
+      completed: boolean; // <-- Add completed status
+    }>;
   }>;
 }
 
@@ -80,13 +84,18 @@ const saveArray = <T>(key: string, data: T[]): void => {
 export const getAllWorkoutTemplates = (): WorkoutTemplate[] => {
   return getArray<WorkoutTemplate>(STORAGE_KEYS.WORKOUT_TEMPLATES);
 };
-export const saveWorkoutTemplate = (newTemplate: WorkoutTemplate): void => {
+export const saveWorkoutTemplate = (templateToSave: WorkoutTemplate): void => {
   const templates = getAllWorkoutTemplates();
-  const index = templates.findIndex(t => t.id === newTemplate.id);
+  const index = templates.findIndex(t => t.id === templateToSave.id);
+
   if (index === -1) {
-    templates.push(newTemplate);
+    // Add new template if ID doesn't exist
+    templates.push(templateToSave);
+    console.log("Saving new template:", templateToSave.id);
   } else {
-    templates[index] = newTemplate; // Simple overwrite update
+    // Update existing template if ID matches
+    templates[index] = templateToSave;
+    console.log("Updating existing template:", templateToSave.id);
   }
   saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
 };
@@ -94,6 +103,7 @@ export const deleteWorkoutTemplate = (templateId: string): void => {
   let templates = getAllWorkoutTemplates();
   templates = templates.filter(t => t.id !== templateId);
   saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
+  console.log("Deleted template:", templateId);
 };
 
 // --- Workout History Functions (remain the same) ---
@@ -171,4 +181,12 @@ export const getActiveWorkoutSession = (): ActiveWorkoutSession | null => {
 export const clearActiveWorkoutSession = (): void => {
   storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
   console.log("Active session explicitly cleared.");
+};
+
+export const getWorkoutTemplateById = (
+  templateId: string
+): WorkoutTemplate | null => {
+  const templates = getAllWorkoutTemplates();
+  const template = templates.find(t => t.id === templateId);
+  return template || null; // Return the found template or null
 };

@@ -6,15 +6,16 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator, // For loading state
+  ActivityIndicator,
 } from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import Card from "@/components/Card";
 import WorkoutListItem from "@/components/WorkoutListItem";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "@/navigation/AppNavigator";
-import { getAllWorkoutTemplates, WorkoutTemplate } from "@/services/storage"; // Import storage functions and type
-import { useFocusEffect } from "@react-navigation/native"; // Import useFocusEffect
+import { getAllWorkoutTemplates, WorkoutTemplate } from "@/services/storage";
+import { useFocusEffect } from "@react-navigation/native";
+import { formatDuration } from "@/utils/formatters"; // Import formatter
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewWorkout">;
 
@@ -23,36 +24,27 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- Fetch Templates ---
+  // --- Fetch Templates (remains the same) ---
   const loadTemplates = useCallback(() => {
     setIsLoading(true);
     try {
       const fetchedTemplates = getAllWorkoutTemplates();
-      // console.log("Fetched Templates:", fetchedTemplates); // For debugging
       setTemplates(fetchedTemplates);
     } catch (error) {
       console.error("Error loading workout templates:", error);
-      // Optionally show an error message to the user
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Use useFocusEffect to reload templates when the screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      loadTemplates();
-    }, [loadTemplates])
-  );
+  useFocusEffect(loadTemplates);
 
   // --- Navigation Handlers ---
   const startEmptyWorkout = () => {
-    console.log("Starting empty workout...");
     navigation.navigate("ActiveWorkout", { template: null });
   };
 
   const startFromTemplate = (template: WorkoutTemplate) => {
-    console.log("Starting workout from template:", template.name);
     navigation.navigate("ActiveWorkout", { template: template });
   };
 
@@ -60,17 +52,27 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate("CreateWorkout");
   };
 
-  // --- Helper to format details ---
+  // --- NEW: Navigate to Edit Screen ---
+  const navigateToEditWorkout = (templateId: string) => {
+    console.log("Navigating to edit template:", templateId);
+    navigation.navigate("EditWorkout", { templateId: templateId });
+  };
+
+  // --- Helper to format details (remains the same) ---
   const formatTemplateDetails = (template: WorkoutTemplate): string => {
     const exerciseCount = template.exercises?.length || 0;
     let details = `${exerciseCount} exercise${exerciseCount !== 1 ? "s" : ""}`;
     if (template.durationEstimate) {
       details += ` • ~${template.durationEstimate} min`;
     }
+    // Add type if available
+    if (template.type) {
+      details += ` • ${template.type}`;
+    }
     return details;
   };
 
-  // --- Styles ---
+  // --- Styles (remain the same) ---
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -78,7 +80,7 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     },
     contentContainer: {
       padding: 16,
-      flexGrow: 1, // Ensure content can grow to fill space if needed
+      flexGrow: 1,
     },
     title: {
       fontSize: 20,
@@ -91,8 +93,8 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       paddingVertical: 15,
       borderRadius: 8,
       alignItems: "center",
-      marginTop: 20, // Add margin top for spacing
-      marginBottom: 10, // Add margin bottom for spacing
+      marginTop: 20,
+      marginBottom: 10,
     },
     buttonText: {
       color: colors.buttonText,
@@ -111,10 +113,9 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     placeholderText: {
       color: colors.textSecondary,
       textAlign: "center",
-      marginBottom: 15, // Space before button
+      marginBottom: 15,
     },
     createButton: {
-      // Style similar to primary button but maybe outlined or different color
       backgroundColor: colors.card,
       paddingVertical: 12,
       paddingHorizontal: 20,
@@ -130,7 +131,7 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     },
   });
 
-  // --- Render Loading State ---
+  // --- Render Loading State (remains the same) ---
   if (isLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -158,19 +159,22 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       <Text style={[styles.title, { marginTop: 30 }]}>Or From Template</Text>
       {templates.length > 0 ? (
         <Card style={{ padding: 0, marginHorizontal: 0 }}>
-          {/* Remove card padding if list items have their own */}
           {templates.map((template, index) => (
             <WorkoutListItem
-              key={template.id} // Use unique template ID as key
+              key={template.id}
               title={template.name}
               details={formatTemplateDetails(template)}
               actionText="Start"
               onPress={() => startFromTemplate(template)}
-              iconName="clipboard-text-play-outline" // Updated icon
+              iconName="clipboard-text-play-outline"
+              // --- Pass edit handler ---
+              onEditPress={() => navigateToEditWorkout(template.id)}
+              editIconName="pencil-outline" // Or your preferred icon
+              // --- Style adjustments ---
               style={{
                 borderBottomWidth:
                   index === templates.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                paddingHorizontal: 16,
+                // paddingHorizontal is now handled within WorkoutListItem
               }}
             />
           ))}
