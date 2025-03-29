@@ -25,10 +25,19 @@ import {
   legsExercises,
   shouldersExercises,
 } from "@/constants/exercises";
+import WorkoutTypePicker from "@/components/WorkoutTypePicker";
 
 // Define navigation props type
 // Assuming CreateWorkoutScreen is pushed onto the RootStack
 type Props = NativeStackScreenProps<RootStackParamList, "CreateWorkout">;
+
+const workoutTypeOptions = [
+  "Strength",
+  "Hypertrophy",
+  "Endurance",
+  "Cardio",
+  "Custom",
+];
 
 // Dummy data for all available exercises (replace with actual data source)
 const DUMMY_EXERCISES: Exercise[] = [
@@ -139,7 +148,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       fontSize: 16,
       borderWidth: 1,
       borderColor: colors.border,
-      marginBottom: 15,
     },
     row: {
       flexDirection: "row",
@@ -172,7 +180,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       borderWidth: 1,
       borderColor: colors.border,
       paddingRight: 10, // Space for icon
-      marginBottom: 15,
     },
     durationInput: {
       flex: 1,
@@ -283,24 +290,12 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
             {/* Workout Type (Placeholder - Needs a Picker/Dropdown) */}
             <View style={[styles.inputGroup, { marginRight: 8 }]}>
               <Text style={styles.inputLabel}>Workout Type</Text>
-              <TouchableOpacity
-                style={styles.pickerTrigger}
-                onPress={() => alert("Workout Type Picker Needed!")} // Placeholder action
-              >
-                <Text
-                  style={[
-                    { fontSize: 16, color: colors.text },
-                    !workoutType && styles.pickerPlaceholder, // Style placeholder text
-                  ]}
-                >
-                  {workoutType ?? "Select type"}
-                </Text>
-                <Icon
-                  name="chevron-down"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
+              <WorkoutTypePicker // <-- Use the new component
+                options={workoutTypeOptions}
+                selectedValue={workoutType}
+                onValueChange={setWorkoutType} // Directly pass the state setter
+                placeholder="Select type"
+              />
             </View>
 
             {/* Duration */}
