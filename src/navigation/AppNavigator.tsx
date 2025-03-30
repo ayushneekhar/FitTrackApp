@@ -78,7 +78,7 @@ const AppNavigator = () => {
               name="dumbbell"
               size={26}
               color={colors.primary}
-              style={{ marginLeft: 10 }}
+              style={{ marginHorizontal: 10 }}
             />
           ),
           headerRight: () => (

@@ -13,7 +13,11 @@ import Card from "@/components/Card";
 import WorkoutListItem from "@/components/WorkoutListItem";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "@/navigation/AppNavigator";
-import { getAllWorkoutTemplates, WorkoutTemplate } from "@/services/storage";
+import {
+  getAllWorkoutTemplates,
+  WorkoutTemplate,
+  saveLastUsedTimestamp, // <-- Import the new function
+} from "@/services/storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { formatDuration } from "@/utils/formatters"; // Import formatter
 
@@ -24,7 +28,7 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- Fetch Templates (remains the same) ---
+  // --- Fetch Templates ---
   const loadTemplates = useCallback(() => {
     setIsLoading(true);
     try {
@@ -45,6 +49,9 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const startFromTemplate = (template: WorkoutTemplate) => {
+    // --- Record the last used timestamp ---
+    saveLastUsedTimestamp(template.id, Date.now());
+    // --- Navigate to the active workout screen ---
     navigation.navigate("ActiveWorkout", { template: template });
   };
 
@@ -52,27 +59,25 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate("CreateWorkout");
   };
 
-  // --- NEW: Navigate to Edit Screen ---
   const navigateToEditWorkout = (templateId: string) => {
     console.log("Navigating to edit template:", templateId);
     navigation.navigate("EditWorkout", { templateId: templateId });
   };
 
-  // --- Helper to format details (remains the same) ---
+  // --- Helper to format details ---
   const formatTemplateDetails = (template: WorkoutTemplate): string => {
     const exerciseCount = template.exercises?.length || 0;
     let details = `${exerciseCount} exercise${exerciseCount !== 1 ? "s" : ""}`;
     if (template.durationEstimate) {
       details += ` • ~${template.durationEstimate} min`;
     }
-    // Add type if available
     if (template.type) {
       details += ` • ${template.type}`;
     }
     return details;
   };
 
-  // --- Styles (remain the same) ---
+  // --- Styles ---
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -116,6 +121,7 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       marginBottom: 15,
     },
     createButton: {
+      marginTop: "auto",
       backgroundColor: colors.card,
       paddingVertical: 12,
       paddingHorizontal: 20,
@@ -131,7 +137,7 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     },
   });
 
-  // --- Render Loading State (remains the same) ---
+  // --- Render Loading State ---
   if (isLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -167,14 +173,11 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
               actionText="Start"
               onPress={() => startFromTemplate(template)}
               iconName="clipboard-text-play-outline"
-              // --- Pass edit handler ---
               onEditPress={() => navigateToEditWorkout(template.id)}
-              editIconName="pencil-outline" // Or your preferred icon
-              // --- Style adjustments ---
+              editIconName="pencil-outline"
               style={{
                 borderBottomWidth:
                   index === templates.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                // paddingHorizontal is now handled within WorkoutListItem
               }}
             />
           ))}
@@ -185,16 +188,14 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.placeholderText}>
             You haven't created any workout templates yet.
           </Text>
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={navigateToCreateWorkout}
-          >
-            <Text style={styles.createButtonText}>
-              Create Your First Template
-            </Text>
-          </TouchableOpacity>
         </Card>
       )}
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={navigateToCreateWorkout}
+      >
+        <Text style={styles.createButtonText}>Create Template</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };

@@ -2,11 +2,15 @@
 import { MMKV } from "react-native-mmkv";
 import uuid from "react-native-uuid";
 
-// --- Interfaces (WorkoutSet, WorkoutTemplate, CompletedWorkout remain the same) ---
+// --- Type for Weight Unit ---
+export type WeightUnit = "lbs" | "kg";
+
+// --- Interfaces ---
 export interface WorkoutSet {
   id: string;
   reps: number;
   weight: number;
+  unit: WeightUnit; // <-- Add unit to WorkoutSet
 }
 
 export interface WorkoutTemplate {
@@ -17,7 +21,8 @@ export interface WorkoutTemplate {
   exercises: Array<{
     id: string;
     name: string;
-    sets: WorkoutSet[];
+    // Template sets might not need a unit, it's decided during the workout
+    sets: Array<{ id: string; reps: number; weight: number }>;
   }>;
 }
 
@@ -34,17 +39,21 @@ export interface CompletedWorkout {
     sets: Array<{
       reps: number;
       weight: number;
-      completed: boolean; // <-- Add completed status
+      completed: boolean;
+      unit: WeightUnit; // <-- Add unit to completed sets
     }>;
   }>;
 }
 
-// --- NEW: Active Workout Session Interface ---
 export interface ActiveWorkoutSession {
-  startTime: number; // Original start time
-  accumulatedSeconds: number; // Time elapsed *before* the last pause
-  template: WorkoutTemplate | null; // The template being used (or null)
-  // Add more state if needed: currentExerciseIndex, currentSetIndex, performedSetsData
+  startTime: number;
+  accumulatedSeconds: number;
+  template: WorkoutTemplate | null;
+}
+
+// --- NEW: User Preferences Interface ---
+export interface UserPreferences {
+  defaultWeightUnit: WeightUnit;
 }
 
 export const storage = new MMKV();
@@ -53,10 +62,13 @@ export const storage = new MMKV();
 const STORAGE_KEYS = {
   WORKOUT_TEMPLATES: "workoutTemplates",
   WORKOUT_HISTORY: "workoutHistory",
-  ACTIVE_WORKOUT_SESSION: "activeWorkoutSession", // New key
+  ACTIVE_WORKOUT_SESSION: "activeWorkoutSession",
+  LAST_USED_TIMESTAMPS: "lastUsedTimestamps",
+  USER_PREFERENCES: "userPreferences", // <-- New key for preferences
 };
 
-// --- Helper Functions (getArray, saveArray remain the same) ---
+// --- Helper Functions (getArray, saveArray, getObject, saveObject) ---
+// ... (keep existing helper functions) ...
 const getArray = <T>(key: string): T[] => {
   const jsonString = storage.getString(key);
   if (jsonString) {
@@ -80,7 +92,31 @@ const saveArray = <T>(key: string, data: T[]): void => {
   }
 };
 
-// --- Workout Template Functions (remain the same) ---
+const getObject = <T extends object>(key: string): T | null => {
+  const jsonString = storage.getString(key);
+  if (jsonString) {
+    try {
+      const data = JSON.parse(jsonString);
+      return typeof data === "object" && data !== null ? (data as T) : null;
+    } catch (error) {
+      console.error(`Error parsing JSON object for key "${key}":`, error);
+      return null;
+    }
+  }
+  return null;
+};
+
+const saveObject = <T extends object>(key: string, data: T): void => {
+  try {
+    const jsonString = JSON.stringify(data);
+    storage.set(key, jsonString);
+  } catch (error) {
+    console.error(`Error stringifying JSON object for key "${key}":`, error);
+  }
+};
+
+// --- Workout Template Functions ---
+// ... (keep existing template functions, note template sets don't have units) ...
 export const getAllWorkoutTemplates = (): WorkoutTemplate[] => {
   return getArray<WorkoutTemplate>(STORAGE_KEYS.WORKOUT_TEMPLATES);
 };
@@ -89,11 +125,9 @@ export const saveWorkoutTemplate = (templateToSave: WorkoutTemplate): void => {
   const index = templates.findIndex(t => t.id === templateToSave.id);
 
   if (index === -1) {
-    // Add new template if ID doesn't exist
     templates.push(templateToSave);
     console.log("Saving new template:", templateToSave.id);
   } else {
-    // Update existing template if ID matches
     templates[index] = templateToSave;
     console.log("Updating existing template:", templateToSave.id);
   }
@@ -103,10 +137,22 @@ export const deleteWorkoutTemplate = (templateId: string): void => {
   let templates = getAllWorkoutTemplates();
   templates = templates.filter(t => t.id !== templateId);
   saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
-  console.log("Deleted template:", templateId);
+  // Also remove last used timestamp if deleting template
+  const timestamps = getLastUsedTimestamps();
+  delete timestamps[templateId];
+  saveObject(STORAGE_KEYS.LAST_USED_TIMESTAMPS, timestamps);
+  console.log("Deleted template and its timestamp:", templateId);
+};
+export const getWorkoutTemplateById = (
+  templateId: string
+): WorkoutTemplate | null => {
+  const templates = getAllWorkoutTemplates();
+  const template = templates.find(t => t.id === templateId);
+  return template || null;
 };
 
-// --- Workout History Functions (remain the same) ---
+// --- Workout History Functions ---
+// ... (keep existing history functions) ...
 export const getWorkoutHistory = (): CompletedWorkout[] => {
   return getArray<CompletedWorkout>(STORAGE_KEYS.WORKOUT_HISTORY).sort(
     (a, b) => b.startTime - a.startTime
@@ -114,6 +160,7 @@ export const getWorkoutHistory = (): CompletedWorkout[] => {
 };
 export const saveCompletedWorkout = (workout: CompletedWorkout): void => {
   const history = getWorkoutHistory();
+  // Ensure units are saved correctly
   history.unshift(workout);
   saveArray(STORAGE_KEYS.WORKOUT_HISTORY, history);
 };
@@ -121,12 +168,8 @@ export const clearWorkoutHistory = (): void => {
   storage.delete(STORAGE_KEYS.WORKOUT_HISTORY);
 };
 
-// --- NEW: Active Workout Session Functions ---
-
-/**
- * Saves the current active workout session state to storage.
- * @param session - The ActiveWorkoutSession object or null to clear.
- */
+// --- Active Workout Session Functions ---
+// ... (keep existing active session functions) ...
 export const saveActiveWorkoutSession = (
   session: ActiveWorkoutSession | null
 ): void => {
@@ -143,17 +186,11 @@ export const saveActiveWorkoutSession = (
     console.error("Error saving active workout session:", error);
   }
 };
-
-/**
- * Retrieves the saved active workout session from storage.
- * @returns The ActiveWorkoutSession object or null if none exists/error occurs.
- */
 export const getActiveWorkoutSession = (): ActiveWorkoutSession | null => {
   const jsonString = storage.getString(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
   if (jsonString) {
     try {
       const session = JSON.parse(jsonString) as ActiveWorkoutSession;
-      // Basic validation
       if (
         session &&
         typeof session.startTime === "number" &&
@@ -163,30 +200,58 @@ export const getActiveWorkoutSession = (): ActiveWorkoutSession | null => {
         return session;
       } else {
         console.warn("Invalid active session data found in storage.");
-        storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION); // Clean up invalid data
+        storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
         return null;
       }
     } catch (error) {
       console.error("Error parsing active workout session:", error);
-      storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION); // Clean up invalid data
+      storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
       return null;
     }
   }
-  return null; // No active session found
+  return null;
 };
-
-/**
- * Clears the saved active workout session from storage.
- */
 export const clearActiveWorkoutSession = (): void => {
   storage.delete(STORAGE_KEYS.ACTIVE_WORKOUT_SESSION);
   console.log("Active session explicitly cleared.");
 };
 
-export const getWorkoutTemplateById = (
-  templateId: string
-): WorkoutTemplate | null => {
-  const templates = getAllWorkoutTemplates();
-  const template = templates.find(t => t.id === templateId);
-  return template || null; // Return the found template or null
+// --- Last Used Timestamp Functions ---
+// ... (keep existing timestamp functions) ...
+export const getLastUsedTimestamps = (): Record<string, number> => {
+  return (
+    getObject<Record<string, number>>(STORAGE_KEYS.LAST_USED_TIMESTAMPS) || {}
+  );
+};
+export const saveLastUsedTimestamp = (
+  templateId: string,
+  timestamp: number
+): void => {
+  const timestamps = getLastUsedTimestamps();
+  timestamps[templateId] = timestamp;
+  saveObject(STORAGE_KEYS.LAST_USED_TIMESTAMPS, timestamps);
+  console.log(`Saved last used timestamp for template ${templateId}`);
+};
+
+// --- NEW: User Preferences Functions ---
+
+/**
+ * Retrieves user preferences from storage.
+ * @returns UserPreferences object or default preferences if none saved.
+ */
+export const getUserPreferences = (): UserPreferences => {
+  const defaults: UserPreferences = {
+    defaultWeightUnit: "kg", // Default to kg
+  };
+  const savedPrefs = getObject<UserPreferences>(STORAGE_KEYS.USER_PREFERENCES);
+  return { ...defaults, ...savedPrefs }; // Merge saved prefs over defaults
+};
+
+/**
+ * Saves user preferences to storage.
+ * @param prefs - The UserPreferences object to save.
+ */
+export const saveUserPreferences = (prefs: UserPreferences): void => {
+  saveObject(STORAGE_KEYS.USER_PREFERENCES, prefs);
+  console.log("User preferences saved:", prefs);
 };

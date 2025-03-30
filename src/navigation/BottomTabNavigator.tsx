@@ -1,7 +1,7 @@
 // src/navigation/BottomTabNavigator.tsx
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { View, StyleSheet, Platform, TouchableOpacity } from "react-native"; // Removed TouchableOpacity for now
+import { View, StyleSheet, Platform, Pressable } from "react-native"; // Removed TouchableOpacity for now
 import DashboardTopTabNavigator from "./DashboardTopTabNavigator";
 import HistoryScreen from "@/screens/HistoryScreen";
 // import AddWorkoutScreen from "@/screens/AddWorkoutScreen"; // We might not need this screen component anymore
@@ -35,18 +35,13 @@ const BottomTabNavigator = () => {
         headerShown: false,
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
+        animation: "shift",
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           height: Platform.OS === "ios" ? 80 : 60,
           paddingBottom: Platform.OS === "ios" ? 20 : 5,
           paddingTop: 5,
-          // Add shadow for the elevated button effect if needed
-          shadowColor: colors.primary,
-          shadowOffset: { width: 0, height: -3 }, // Shadow upwards
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-          elevation: 5, // For Android elevation
         },
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: React.ComponentProps<typeof Icon>["name"] = "help";
@@ -61,7 +56,7 @@ const BottomTabNavigator = () => {
           } else if (route.name === "HistoryTab") {
             iconName = "history";
           } else if (route.name === "AnalyticsTab") {
-            iconName = focused ? "chart-line" : "chart-line";
+            iconName = "chart-line";
           } else if (route.name === "ProfileTab") {
             iconName = focused ? "account-circle" : "account-circle-outline";
           }
@@ -85,7 +80,7 @@ const BottomTabNavigator = () => {
         options={{
           // --- Style the Button Itself ---
           tabBarButton: (props: BottomTabBarButtonProps) => (
-            <TouchableOpacity
+            <Pressable
               {...props} // Pass down props like onPress, accessibilityRole etc.
               style={[
                 styles.customButtonContainer,
@@ -102,7 +97,7 @@ const BottomTabNavigator = () => {
                 {/* Render the icon inside the custom button */}
                 <Icon name="plus" size={30} color={colors.buttonText} />
               </View>
-            </TouchableOpacity>
+            </Pressable>
           ),
         }}
         // --- Add Listener to Handle Navigation ---

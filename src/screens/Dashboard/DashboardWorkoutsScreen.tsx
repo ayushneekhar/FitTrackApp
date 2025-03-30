@@ -1,11 +1,24 @@
 // src/screens/Dashboard/DashboardWorkoutsScreen.tsx
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import React, { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import Card from "@/components/Card";
 import WorkoutListItem from "@/components/WorkoutListItem";
-import { getAllWorkoutTemplates } from "@/services/storage";
-import { useNavigation } from "@react-navigation/native";
+import {
+  getAllWorkoutTemplates,
+  WorkoutTemplate,
+  getLastUsedTimestamps, // <-- Import function to get timestamps
+} from "@/services/storage";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { formatRelativeDate } from "@/utils/formatters"; // <-- Import formatter
+
 // Import navigation types if needed
 // import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 // import { DashboardTopTabParamList } from '@/navigation/DashboardTopTabNavigator';
@@ -14,59 +27,158 @@ import { useNavigation } from "@react-navigation/native";
 
 const DashboardWorkoutsScreen: React.FC = () => {
   const { colors } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>(); // Use any for simplicity or define specific type
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [lastUsedTimestamps, setLastUsedTimestamps] = useState<
+    Record<string, number>
+  >({});
+  const [isLoading, setIsLoading] = useState(true);
 
+  // --- Load Data ---
+  const loadData = useCallback(() => {
+    setIsLoading(true);
+    try {
+      const fetchedTemplates = getAllWorkoutTemplates();
+      const fetchedTimestamps = getLastUsedTimestamps();
+      setTemplates(fetchedTemplates);
+      setLastUsedTimestamps(fetchedTimestamps);
+    } catch (error) {
+      console.error("Error loading workout screen data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Reload data when the screen comes into focus
+  useFocusEffect(loadData);
+
+  // --- Format Details String ---
+  const formatTemplateDetails = (
+    template: WorkoutTemplate,
+    timestamp?: number
+  ): string => {
+    const exerciseCount = template.exercises?.length || 0;
+    let details = `${exerciseCount} exercise${exerciseCount !== 1 ? "s" : ""}`;
+    if (template.type) {
+      details += ` • ${template.type}`;
+    }
+    if (timestamp) {
+      details += ` • Last used: ${formatRelativeDate(timestamp)}`; // Add last used date
+    } else {
+      details += ` • Never used`;
+    }
+    return details;
+  };
+
+  // --- Navigation Handlers ---
+  const startFromTemplate = (template: WorkoutTemplate) => {
+    // Need to save timestamp here too if starting from this screen
+    // saveLastUsedTimestamp(template.id, Date.now()); // Consider if needed
+    navigation.navigate("ActiveWorkout", { template: template });
+  };
+
+  const navigateToEditWorkout = (templateId: string) => {
+    navigation.navigate("EditWorkout", { templateId: templateId });
+  };
+
+  const navigateToCreateWorkout = () => {
+    navigation.navigate("CreateWorkout");
+  };
+
+  // --- Styles ---
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
-    title: {
-      margin: 16,
-      fontSize: 20,
-      fontWeight: "bold",
-      color: colors.text,
+    contentContainer: {
+      paddingVertical: 8, // Add padding for scrollview content
+      paddingBottom: 20,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 20,
     },
     placeholderText: {
       fontSize: 16,
       color: colors.textSecondary,
       textAlign: "center",
       marginTop: 40,
+      paddingHorizontal: 20,
+    },
+    createButton: {
+      marginTop: 16,
+      marginHorizontal: 16,
+      backgroundColor: colors.card,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      alignItems: "center",
+    },
+    createButtonText: {
+      color: colors.primary,
+      fontSize: 16,
+      fontWeight: "bold",
     },
   });
 
-  const workouts = getAllWorkoutTemplates();
+  // --- Render Loading ---
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Your Workout Templates</Text>
-      {workouts.length > 0 ? (
-        <Card style={{ padding: 0 }}>
-          {/* Remove card padding if list items have their own */}
-          {workouts.map((workout, index) => (
-            <WorkoutListItem
-              key={workout.id}
-              title={workout.name}
-              details={`${workout.exercises.length} exercises • ${workout.date}`}
-              actionText="Start"
-              onPress={() => navigation.navigate("ActiveWorkoyut")}
-              iconName="clipboard-play-outline"
-              style={{
-                borderBottomWidth:
-                  index === workouts.length - 1 ? 0 : StyleSheet.hairlineWidth, // No border on last item
-                paddingHorizontal: 16, // Add horizontal padding back
-              }}
-            />
-          ))}
-        </Card>
-      ) : (
-        <Text style={styles.placeholderText}>
-          Create your first workout template!
-        </Text>
-      )}
-
-      {/* You could add sections for saved workouts, history etc. */}
-    </ScrollView>
+    <>
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={navigateToCreateWorkout}
+      >
+        <Text style={styles.createButtonText}>Create New Template</Text>
+      </TouchableOpacity>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+      >
+        {templates.length > 0 ? (
+          <Card style={{ padding: 0, marginHorizontal: 16 }}>
+            {templates.map((template, index) => {
+              const lastUsed = lastUsedTimestamps[template.id];
+              return (
+                <WorkoutListItem
+                  key={template.id}
+                  title={template.name}
+                  details={formatTemplateDetails(template, lastUsed)}
+                  actionText="Start"
+                  onPress={() => startFromTemplate(template)}
+                  iconName="clipboard-play-outline"
+                  onEditPress={() => navigateToEditWorkout(template.id)}
+                  editIconName="pencil-outline"
+                  style={{
+                    borderBottomWidth:
+                      index === templates.length - 1
+                        ? 0
+                        : StyleSheet.hairlineWidth,
+                    paddingHorizontal: 16,
+                  }}
+                />
+              );
+            })}
+          </Card>
+        ) : (
+          <Text style={styles.placeholderText}>
+            You haven't created any workout templates yet!
+          </Text>
+        )}
+      </ScrollView>
+    </>
   );
 };
 

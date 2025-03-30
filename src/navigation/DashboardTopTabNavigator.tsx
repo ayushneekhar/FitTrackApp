@@ -18,12 +18,10 @@ const Tab = createMaterialTopTabNavigator<DashboardTopTabParamList>();
 
 const DashboardTopTabNavigator = () => {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets(); // Get safe area insets
 
   return (
     <Tab.Navigator
       screenOptions={{
-        // Apply options directly in Navigator props
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
         tabBarIndicatorStyle: { backgroundColor: colors.tabActive },
@@ -34,7 +32,6 @@ const DashboardTopTabNavigator = () => {
         },
         tabBarStyle: {
           backgroundColor: colors.card, // Use card color for tab bar bg
-          paddingTop: insets.top, // Add padding for safe area
           shadowColor: "#000", // Optional: add shadow
           shadowOffset: { width: 0, height: 1 },
           shadowOpacity: 0.1,
@@ -42,28 +39,6 @@ const DashboardTopTabNavigator = () => {
           elevation: 2,
         },
       }}
-
-      // Alternative: Apply options directly as props
-      // tabBarOptions={{
-      //   // Note: tabBarOptions is deprecated in v6, use screenOptions
-      //   activeTintColor: colors.tabActive,
-      //   inactiveTintColor: colors.tabInactive,
-      //   indicatorStyle: { backgroundColor: colors.tabActive },
-      //   labelStyle: {
-      //     fontSize: 14,
-      //     textTransform: "capitalize",
-      //     fontWeight: "500",
-      //   },
-      //   style: {
-      //     backgroundColor: colors.card,
-      //     paddingTop: insets.top,
-      //     shadowColor: "#000",
-      //     shadowOffset: { width: 0, height: 1 },
-      //     shadowOpacity: 0.1,
-      //     shadowRadius: 2,
-      //     elevation: 2,
-      //   },
-      // }}
     >
       <Tab.Screen name="Overview" component={DashboardOverviewScreen} />
       <Tab.Screen name="Analytics" component={DashboardAnalyticsScreen} />

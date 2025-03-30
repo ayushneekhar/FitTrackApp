@@ -13,7 +13,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  TextInput, // Import TextInput
+  TextInput,
 } from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import { usePreventRemove } from "@react-navigation/native";
@@ -26,7 +26,8 @@ import {
   ActiveWorkoutSession,
   saveActiveWorkoutSession,
   clearActiveWorkoutSession,
-  WorkoutSet, // Import WorkoutSet if needed separately
+  WorkoutSet as StoredWorkoutSet,
+  WeightUnit,
 } from "@/services/storage";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import uuid from "react-native-uuid";
@@ -35,7 +36,8 @@ import Card from "@/components/Card";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ActiveWorkout">;
 
-interface ActiveWorkoutSet extends WorkoutSet {
+// Extend StoredWorkoutSet for active state
+interface ActiveWorkoutSet extends StoredWorkoutSet {
   completed: boolean;
 }
 
@@ -45,9 +47,13 @@ interface ActiveWorkoutExercise {
   sets: ActiveWorkoutSet[];
 }
 
+// --- NEW: Define Exercise Status Type ---
+type ExerciseStatus = "not-started" | "in-progress" | "completed";
+
 const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { colors } = useTheme();
+  const { colors, preferences } = useTheme();
   const { template: initialTemplate, resumeData } = route.params;
+  const defaultUnit = preferences.defaultWeightUnit;
 
   // --- State ---
   const [startTime, setStartTime] = useState<number>(0);
@@ -55,45 +61,52 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastResumeTime, setLastResumeTime] = useState<number>(0);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  // State to hold the actual workout progress
   const [workoutExercises, setWorkoutExercises] = useState<
     ActiveWorkoutExercise[]
   >([]);
-  const [isTimerRunning, setIsTimerRunning] = useState(false); // For explicit timer control
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
 
   // --- Refs ---
   const startTimeRef = useRef(startTime);
   const accumulatedSecondsRef = useRef(accumulatedSeconds);
   const isFinishedRef = useRef(false);
   const elapsedSecondsRef = useRef(0);
-  // Ref for workoutExercises to use in save function
   const workoutExercisesRef = useRef(workoutExercises);
 
   // Update refs
   useEffect(() => {
     startTimeRef.current = startTime;
     accumulatedSecondsRef.current = accumulatedSeconds;
-    workoutExercisesRef.current = workoutExercises; // Update exercises ref
+    workoutExercisesRef.current = workoutExercises;
   }, [startTime, accumulatedSeconds, workoutExercises]);
 
-  // --- Initialization ---
+  // --- Initialization (remains the same) ---
   useEffect(() => {
     let initialExercises: ActiveWorkoutExercise[] = [];
     let startAccumulated = 0;
     let startTimestamp = 0;
     let startResumeTime = 0;
 
+    const createSetsWithUnit = (
+      sets: Array<{ id: string; reps: number; weight: number }>
+    ): ActiveWorkoutSet[] => {
+      return sets.map(set => ({
+        ...set,
+        unit: defaultUnit,
+        completed: false,
+      }));
+    };
+
     if (resumeData) {
       console.log("Resuming workout session:", resumeData);
-      // TODO: Need to properly restore workoutExercises state from resumeData
-      // For now, we just restore the template and time
       startAccumulated = resumeData.accumulatedSeconds;
       startTimestamp = resumeData.startTime;
       startResumeTime = Date.now();
       initialExercises =
         resumeData.template?.exercises.map(ex => ({
-          ...ex,
-          sets: ex.sets.map(set => ({ ...set, completed: false })), // Assume sets aren't completed on resume for now
+          id: ex.id,
+          name: ex.name,
+          sets: createSetsWithUnit(ex.sets),
         })) || [];
       isFinishedRef.current = false;
       clearActiveWorkoutSession();
@@ -106,22 +119,16 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       initialExercises = initialTemplate.exercises.map(ex => ({
         id: ex.id,
         name: ex.name,
-        sets: ex.sets.map(set => ({
-          id: set.id,
-          reps: set.reps,
-          weight: set.weight,
-          completed: false, // Initialize sets as not completed
-        })),
+        sets: createSetsWithUnit(ex.sets),
       }));
       isFinishedRef.current = false;
     } else {
-      // Handle starting an empty workout (allow adding exercises dynamically - future enhancement)
-      console.log("Starting empty workout (basic setup).");
+      console.log("Starting empty workout.");
       const now = Date.now();
       startTimestamp = now;
       startResumeTime = now;
       startAccumulated = 0;
-      initialExercises = []; // Start with no exercises
+      initialExercises = [];
       isFinishedRef.current = false;
     }
 
@@ -129,14 +136,14 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     setAccumulatedSeconds(startAccumulated);
     setLastResumeTime(startResumeTime);
     setWorkoutExercises(initialExercises);
-    setCurrentExerciseIndex(0); // Start at the first exercise
-    setIsTimerRunning(true); // Start timer automatically
-  }, [resumeData, initialTemplate]);
+    setCurrentExerciseIndex(0);
+    setIsTimerRunning(true);
+  }, [resumeData, initialTemplate, defaultUnit]);
 
   const currentExercise = workoutExercises[currentExerciseIndex];
-  const workoutName = initialTemplate?.name || "New Workout"; // Get name from template
+  const workoutName = initialTemplate?.name || "New Workout";
 
-  // --- Timer Logic ---
+  // --- Timer Logic & Controls (remain the same) ---
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isTimerRunning && lastResumeTime > 0) {
@@ -156,15 +163,12 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     };
   }, [isTimerRunning, lastResumeTime, accumulatedSeconds]);
 
-  // --- Timer Controls ---
   const handleToggleTimer = () => {
     if (isTimerRunning) {
-      // Pause timer
-      setAccumulatedSeconds(elapsedSecondsRef.current); // Store current elapsed time
-      setLastResumeTime(0); // Stop timer interval by resetting resume time
+      setAccumulatedSeconds(elapsedSecondsRef.current);
+      setLastResumeTime(0);
     } else {
-      // Start/Resume timer
-      setLastResumeTime(Date.now()); // Record resume time
+      setLastResumeTime(Date.now());
     }
     setIsTimerRunning(!isTimerRunning);
   };
@@ -179,31 +183,28 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           setAccumulatedSeconds(0);
           setElapsedSeconds(0);
           elapsedSecondsRef.current = 0;
-          setLastResumeTime(isTimerRunning ? Date.now() : 0); // Reset resume time based on running state
+          setLastResumeTime(isTimerRunning ? Date.now() : 0);
         },
       },
     ]);
   };
 
-  // --- Save Session Function ---
+  // --- Save Session Function (remains the same) ---
   const saveCurrentSession = useCallback(() => {
     if (!isFinishedRef.current && startTimeRef.current > 0) {
-      // TODO: Save the actual state of workoutExercisesRef.current
       const sessionToSave: ActiveWorkoutSession = {
         startTime: startTimeRef.current,
         accumulatedSeconds: elapsedSecondsRef.current,
-        // For now, saving the initial template. Ideally save workoutExercisesRef.current state
         template: initialTemplate || null,
-        // Add currentExerciseIndex, etc. if needed for full resume
       };
       console.log("Saving session state...", sessionToSave);
       saveActiveWorkoutSession(sessionToSave);
     } else {
       console.log("Not saving session (finished or invalid).");
     }
-  }, [initialTemplate]); // Dependency on initialTemplate for now
+  }, [initialTemplate]);
 
-  // --- Prevent Back Navigation Hook ---
+  // --- Prevent Back Navigation Hook (remains the same) ---
   usePreventRemove(startTime > 0 && !isFinishedRef.current, ({ data }) => {
     Alert.alert(
       "Pause Workout?",
@@ -214,8 +215,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           text: "Pause & Leave",
           style: "destructive",
           onPress: () => {
-            setIsTimerRunning(false); // Explicitly pause timer
-            setAccumulatedSeconds(elapsedSecondsRef.current); // Update accumulated time before saving
+            setIsTimerRunning(false);
+            setAccumulatedSeconds(elapsedSecondsRef.current);
             saveCurrentSession();
             navigation.dispatch(data.action);
           },
@@ -224,7 +225,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   });
 
-  // --- Set Data Handling ---
+  // --- Set Data Handling (Reps, Weight, Unit - remain the same) ---
   const handleRepsChange = (setIndex: number, value: string) => {
     const reps = parseInt(value, 10);
     setWorkoutExercises(prevExercises =>
@@ -261,13 +262,13 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
 
-  const handleToggleSetComplete = (setIndex: number) => {
+  const handleUnitChange = (setIndex: number, newUnit: WeightUnit) => {
     setWorkoutExercises(prevExercises =>
       prevExercises.map((ex, exIndex) => {
         if (exIndex === currentExerciseIndex) {
           const updatedSets = ex.sets.map((set, sIndex) => {
             if (sIndex === setIndex) {
-              return { ...set, completed: !set.completed };
+              return { ...set, unit: newUnit };
             }
             return set;
           });
@@ -276,7 +277,51 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         return ex;
       })
     );
-    // Optional: Auto-advance to next set/exercise or start rest timer here
+  };
+
+  // --- Toggle Set Complete & Auto-Advance ---
+  const handleToggleSetComplete = (setIndex: number) => {
+    let exerciseJustCompleted = false;
+    let updatedExercises: ActiveWorkoutExercise[] = [];
+
+    setWorkoutExercises(prevExercises => {
+      updatedExercises = prevExercises.map((ex, exIndex) => {
+        if (exIndex === currentExerciseIndex) {
+          // Update the specific set's completed status
+          const updatedSets = ex.sets.map((set, sIndex) => {
+            if (sIndex === setIndex) {
+              return { ...set, completed: !set.completed };
+            }
+            return set;
+          });
+
+          // Check if *this* exercise is now fully completed
+          const allSetsCompleted = updatedSets.every(set => set.completed);
+          if (allSetsCompleted) {
+            exerciseJustCompleted = true;
+          }
+
+          return { ...ex, sets: updatedSets };
+        }
+        return ex;
+      });
+      return updatedExercises; // Return the new state
+    });
+
+    // --- Auto-Advance Logic ---
+    // Needs to run *after* state update is processed.
+    // Using a microtask (Promise.resolve) ensures it runs after the current render cycle.
+    Promise.resolve().then(() => {
+      if (
+        exerciseJustCompleted &&
+        currentExerciseIndex < workoutExercisesRef.current.length - 1 // Use ref for latest length
+      ) {
+        console.log(
+          `Exercise ${currentExerciseIndex + 1} completed, advancing.`
+        );
+        handleNextExercise();
+      }
+    });
   };
 
   // --- Exercise Navigation ---
@@ -291,7 +336,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handlePreviousExercise = () => {
     if (currentExerciseIndex > 0) {
-      setCurrentExerciseIndex(prev => prev - 1);
+      setCurrentExerciseIndex(prev => prev - 1); // Corrected to prev - 1
     }
   };
 
@@ -299,32 +344,32 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     setCurrentExerciseIndex(index);
   };
 
-  // --- Finish Workout Logic ---
+  // --- Finish Workout Logic (remains the same) ---
   const handleFinishWorkout = useCallback(() => {
     if (!startTime) return;
     isFinishedRef.current = true;
     const endTime = Date.now();
     const finalDurationSeconds = elapsedSecondsRef.current;
 
-    // Use the *actual* state from workoutExercisesRef
     const finalExercises = workoutExercisesRef.current.map(ex => ({
       id: ex.id,
       name: ex.name,
       sets: ex.sets.map(set => ({
         reps: Number(set.reps) || 0,
         weight: Number(set.weight) || 0,
-        completed: set.completed, // Save completion status
+        completed: set.completed,
+        unit: set.unit,
       })),
     }));
 
     const completedWorkoutData: CompletedWorkout = {
       id: uuid.v4() as string,
-      templateId: initialTemplate?.id, // Use initial template ID
+      templateId: initialTemplate?.id,
       name: workoutName,
       startTime: startTime,
       endTime: endTime,
       durationSeconds: finalDurationSeconds,
-      exercises: finalExercises, // Save the actual performed data
+      exercises: finalExercises,
     };
 
     try {
@@ -341,15 +386,14 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       Alert.alert("Error", "Could not save workout session.");
       isFinishedRef.current = false;
     }
-  }, [startTime, initialTemplate, workoutName, navigation]); // Dependencies
+  }, [startTime, initialTemplate, workoutName, navigation]);
 
-  // --- Header ---
+  // --- Header (remains the same) ---
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: workoutName, // Use workout name from template/state
-      headerTitleAlign: "left", // Align title left like screenshot
+      title: workoutName,
+      headerTitleAlign: "left",
       headerLeft: () => (
-        // Custom back button if needed
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={{ padding: 5, marginLeft: 10 }}
@@ -363,7 +407,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           style={styles.finishButton}
         >
           <Icon
-            name="content-save-check-outline" // Different icon?
+            name="content-save-check-outline"
             size={18}
             color={colors.buttonText}
             style={{ marginRight: 5 }}
@@ -371,12 +415,32 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.finishButtonText}>Finish Workout</Text>
         </TouchableOpacity>
       ),
-      gestureEnabled: false, // Keep disabled
+      gestureEnabled: false,
     });
   }, [navigation, handleFinishWorkout, workoutName, colors]);
 
+  // --- NEW: Helper to Get Exercise Status ---
+  const getExerciseStatus = (
+    exercise: ActiveWorkoutExercise
+  ): ExerciseStatus => {
+    if (!exercise || !exercise.sets || exercise.sets.length === 0) {
+      return "not-started"; // Or handle as an error/edge case
+    }
+    const totalSets = exercise.sets.length;
+    const completedSets = exercise.sets.filter(set => set.completed).length;
+
+    if (completedSets === 0) {
+      return "not-started";
+    } else if (completedSets === totalSets) {
+      return "completed";
+    } else {
+      return "in-progress";
+    }
+  };
+
   // --- Styles ---
   const styles = StyleSheet.create({
+    // ... (keep existing styles for container, timer, nav, inputs etc.) ...
     container: {
       flex: 1,
       backgroundColor: colors.background,
@@ -461,7 +525,9 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     },
     // Current Exercise Section
     currentExerciseSection: {
-      padding: 16,
+      paddingHorizontal: 16,
+      paddingTop: 16, // Add top padding
+      paddingBottom: 6, // Reduce bottom padding slightly
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
@@ -474,7 +540,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     setTableHeader: {
       flexDirection: "row",
       marginBottom: 8,
-      paddingHorizontal: 5, // Align with set row padding
+      paddingHorizontal: 5,
     },
     setHeaderText: {
       fontSize: 12,
@@ -482,10 +548,12 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       fontWeight: "bold",
       textAlign: "center",
     },
-    setCol: { width: 40 }, // Set number column
-    repsCol: { flex: 1, marginHorizontal: 5 }, // Reps column
-    weightCol: { flex: 1, marginHorizontal: 5 }, // Weight column
-    doneCol: { width: 50 }, // Done column
+    // Column widths
+    setCol: { width: 40 },
+    repsCol: { flex: 1, marginHorizontal: 5 },
+    weightCol: { flex: 1.5, marginHorizontal: 5 }, // Make weight col wider
+    doneCol: { width: 50 },
+    // Set Row
     setRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -493,78 +561,169 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       paddingVertical: 5,
     },
     setNumberText: {
-      width: 40, // Match header col width
+      width: 40,
       fontSize: 14,
       color: colors.textSecondary,
       textAlign: "center",
     },
-    setInputContainer: {
-      flex: 1, // Take space in flex columns
+    // Input container for Reps
+    repsInputContainer: {
+      flex: 1, // Takes space defined by repsCol
       backgroundColor: colors.background,
       borderRadius: 6,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingHorizontal: 8, // Inner padding
-      marginHorizontal: 5, // Space between inputs
-      minHeight: 40, // Ensure touchable area
-      justifyContent: "center", // Center text vertically
+      paddingHorizontal: 8,
+      marginHorizontal: 5,
+      minHeight: 40,
+      justifyContent: "center",
+      position: "relative", // Needed for absolute positioning of +/- buttons
+    },
+    // Input container for Weight (includes unit buttons)
+    weightInputContainer: {
+      flex: 1.5, // Takes space defined by weightCol
+      flexDirection: "row", // Arrange input and units horizontally
+      alignItems: "center",
+      backgroundColor: colors.background,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingLeft: 8, // Padding before the text input
+      marginHorizontal: 5,
+      minHeight: 40,
     },
     setInput: {
       fontSize: 14,
       color: colors.text,
       textAlign: "center",
-      paddingVertical: 8, // Adjust vertical padding
+      paddingVertical: 8,
     },
+    // Specific style for weight input to control its width within the container
+    weightTextInput: {
+      flex: 1, // Allow input to take available space before units
+      fontSize: 14,
+      color: colors.text,
+      textAlign: "center",
+      paddingVertical: 8,
+    },
+    // Unit toggle buttons
+    unitToggleContainer: {
+      flexDirection: "row",
+      marginLeft: 5, // Space between input and units
+      paddingRight: 5, // Padding inside the border
+    },
+    unitToggleButton: {
+      paddingVertical: 4,
+      paddingHorizontal: 6,
+      borderRadius: 4,
+      marginLeft: 3,
+    },
+    unitToggleButtonSelected: {
+      backgroundColor: colors.primary,
+    },
+    unitToggleText: {
+      fontSize: 12,
+      fontWeight: "bold",
+      color: colors.textSecondary,
+    },
+    unitToggleTextSelected: {
+      color: colors.buttonText,
+    },
+    // Done button
     setDoneButton: {
-      width: 50, // Match header col width
-      height: 40, // Match input height
+      width: 50,
+      height: 40,
       justifyContent: "center",
       alignItems: "center",
       backgroundColor: colors.card,
       borderRadius: 6,
       borderWidth: 1,
       borderColor: colors.border,
-      marginLeft: 5, // Space before button
+      marginLeft: 5,
     },
     setDoneButtonCompleted: {
       borderColor: colors.primary,
       backgroundColor: colors.primary,
     },
     setRowCompleted: {
-      opacity: 0.6, // Dim completed row slightly
+      opacity: 0.6,
+    },
+    // Reps +/- buttons
+    decreaseReps: {
+      position: "absolute",
+      right: 5, // Position inside right edge
+      top: -5, // Adjust vertical position
+      zIndex: 2,
+      padding: 5,
+    },
+    increaseReps: {
+      position: "absolute",
+      right: 5, // Position inside right edge
+      bottom: -5, // Adjust vertical position
+      zIndex: 2,
+      padding: 5,
     },
     // All Exercises Section
     allExercisesSection: {
-      paddingTop: 16, // No top padding needed if header has border
-      rowGap: 8,
+      paddingTop: 16,
+      rowGap: 8, // Use gap for spacing between items
+      paddingBottom: 20, // Add padding at the bottom
     },
     allExercisesTitle: {
       fontSize: 18,
       fontWeight: "bold",
       color: colors.text,
       marginBottom: 10,
-      paddingHorizontal: 16, // Add padding to title
+      paddingHorizontal: 16,
     },
     exerciseListItem: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      padding: 16,
+      paddingVertical: 12, // Adjust padding
+      paddingHorizontal: 16,
       marginHorizontal: 16,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 8,
+      backgroundColor: colors.card, // Default background
     },
     exerciseListItemActive: {
-      backgroundColor: colors.progressBarBackground, // Highlight active item
+      borderColor: colors.primary, // Highlight border for active
+      backgroundColor: colors.progressBarBackground, // Slightly different bg for active
+    },
+    // --- NEW: Styles for Exercise Status ---
+    exerciseListItemContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      flex: 1, // Take available space
+    },
+    statusIcon: {
+      marginRight: 12, // Space between icon and text
+      width: 20, // Fixed width for alignment
+      textAlign: "center",
+    },
+    exerciseListItemTextContainer: {
+      flex: 1, // Allow text to wrap
     },
     exerciseListName: {
       fontSize: 16,
       color: colors.text,
+      fontWeight: "500", // Make name slightly bolder
     },
     exerciseListSets: {
       fontSize: 14,
       color: colors.textSecondary,
+      marginTop: 2, // Add space below name
+    },
+    // Specific styles based on status
+    exerciseListItemInProgress: {
+      // Optional: slightly different background or border
+      // backgroundColor: colors.background,
+    },
+    exerciseListItemCompleted: {
+      opacity: 0.6, // Dim completed exercises
+      // backgroundColor: colors.background, // Optional different background
     },
     // Finish Button (Header)
     finishButton: {
@@ -581,8 +740,11 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       fontWeight: "bold",
       fontSize: 14,
     },
-    decreaseReps: { left: 148, zIndex: 2, position: "absolute" },
-    increaseReps: { left: 56, zIndex: 2, position: "absolute" },
+    placeholderText: {
+      color: colors.textSecondary,
+      textAlign: "center",
+      padding: 20,
+    },
   });
 
   // --- Render ---
@@ -594,6 +756,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     >
       {/* Workout Timer */}
       <View style={styles.timerSection}>
+        {/* ... timer display and buttons ... */}
         <Text style={styles.timerLabel}>Workout Timer</Text>
         <Text style={styles.timerDisplay}>
           {formatDuration(elapsedSeconds)}
@@ -603,8 +766,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
             style={[
               styles.timerButton,
               isTimerRunning
-                ? styles.timerButtonSecondary // Show Pause style if running
-                : styles.timerButtonPrimary, // Show Start style if paused
+                ? styles.timerButtonSecondary
+                : styles.timerButtonPrimary,
             ]}
             onPress={handleToggleTimer}
           >
@@ -640,6 +803,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
       {/* Prev/Next Navigation */}
       <View style={styles.navSection}>
+        {/* ... nav buttons ... */}
         <TouchableOpacity
           style={[
             styles.navButton,
@@ -673,68 +837,113 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.setTableHeader}>
             <Text style={[styles.setHeaderText, styles.setCol]}>Set</Text>
             <Text style={[styles.setHeaderText, styles.repsCol]}>Reps</Text>
-            <Text style={[styles.setHeaderText, styles.weightCol]}>
-              Weight ({/* Add unit preference later */}kg)
-            </Text>
+            <Text style={[styles.setHeaderText, styles.weightCol]}>Weight</Text>
             <Text style={[styles.setHeaderText, styles.doneCol]}>Done</Text>
           </View>
           {/* Sets List */}
           {currentExercise.sets.map((set, index) => (
             <View
               key={set.id}
-              style={[
-                styles.setRow,
-                set.completed && styles.setRowCompleted, // Apply style if completed
-              ]}
+              style={[styles.setRow, set.completed && styles.setRowCompleted]}
             >
               <Text style={styles.setNumberText}>{index + 1}</Text>
+
               {/* Reps Input */}
-              <TouchableOpacity
-                onPress={() =>
-                  handleRepsChange(index, (set.reps + 1).toString())
-                }
-                style={styles.decreaseReps}
-              >
-                <Icon
-                  name="chevron-up"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-              <View style={styles.setInputContainer}>
+              <View style={styles.repsInputContainer}>
                 <TextInput
                   style={styles.setInput}
                   value={set.reps.toString()}
                   onChangeText={value => handleRepsChange(index, value)}
                   keyboardType="number-pad"
                   selectTextOnFocus
-                  editable={!set.completed} // Disable editing if completed
+                  editable={!set.completed}
                 />
+                {/* +/- Buttons for Reps */}
+                <TouchableOpacity
+                  onPress={() =>
+                    !set.completed &&
+                    handleRepsChange(index, (set.reps + 1).toString())
+                  }
+                  style={styles.decreaseReps}
+                  disabled={set.completed}
+                >
+                  <Icon
+                    name="chevron-up"
+                    size={20}
+                    color={set.completed ? colors.border : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() =>
+                    !set.completed &&
+                    handleRepsChange(
+                      index,
+                      Math.max(0, set.reps - 1).toString()
+                    )
+                  }
+                  style={styles.increaseReps}
+                  disabled={set.completed}
+                >
+                  <Icon
+                    name="chevron-down"
+                    size={20}
+                    color={set.completed ? colors.border : colors.textSecondary}
+                  />
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                onPress={() =>
-                  handleRepsChange(index, (set.reps - 1).toString())
-                }
-                style={styles.increaseReps}
-              >
-                <Icon
-                  name="chevron-down"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-              {/* Weight Input */}
-              <View style={styles.setInputContainer}>
+              {/* Weight Input & Unit Toggle */}
+              <View style={styles.weightInputContainer}>
                 <TextInput
-                  style={styles.setInput}
+                  style={styles.weightTextInput}
                   value={set.weight.toString()}
                   onChangeText={value => handleWeightChange(index, value)}
                   keyboardType="numeric"
                   selectTextOnFocus
-                  editable={!set.completed} // Disable editing if completed
+                  editable={!set.completed}
                 />
+                <View style={styles.unitToggleContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.unitToggleButton,
+                      set.unit === "kg" && styles.unitToggleButtonSelected,
+                    ]}
+                    onPress={() =>
+                      !set.completed && handleUnitChange(index, "kg")
+                    }
+                    disabled={set.completed}
+                  >
+                    <Text
+                      style={[
+                        styles.unitToggleText,
+                        set.unit === "kg" && styles.unitToggleTextSelected,
+                      ]}
+                    >
+                      kg
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.unitToggleButton,
+                      set.unit === "lbs" && styles.unitToggleButtonSelected,
+                    ]}
+                    onPress={() =>
+                      !set.completed && handleUnitChange(index, "lbs")
+                    }
+                    disabled={set.completed}
+                  >
+                    <Text
+                      style={[
+                        styles.unitToggleText,
+                        set.unit === "lbs" && styles.unitToggleTextSelected,
+                      ]}
+                    >
+                      lbs
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
+
               {/* Done Button */}
               <TouchableOpacity
                 style={[
@@ -744,7 +953,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
                 onPress={() => handleToggleSetComplete(index)}
               >
                 <Icon
-                  name={set.completed ? "check" : "close"} // Show check when done
+                  name={set.completed ? "check" : "checkbox-blank-outline"}
                   size={20}
                   color={
                     set.completed ? colors.buttonText : colors.textSecondary
@@ -756,33 +965,65 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         </View>
       ) : (
         <View style={{ padding: 20, alignItems: "center" }}>
-          <Text style={{ color: colors.textSecondary }}>
+          <Text style={styles.placeholderText}>
             {workoutExercises.length === 0
               ? "No exercises in this workout."
               : "Select an exercise."}
           </Text>
-          {/* Add button to add exercises if workout is empty? */}
         </View>
       )}
 
       {/* All Exercises List */}
       <View style={styles.allExercisesSection}>
         <Text style={styles.allExercisesTitle}>All Exercises</Text>
-        {workoutExercises.map((exercise, index) => (
-          <TouchableOpacity
-            key={exercise.id}
-            style={[
-              styles.exerciseListItem,
-              index === currentExerciseIndex && styles.exerciseListItemActive, // Highlight current
-            ]}
-            onPress={() => handleSelectExercise(index)}
-          >
-            <Text style={styles.exerciseListName}>{exercise.name}</Text>
-            <Text style={styles.exerciseListSets}>
-              {exercise.sets.length} sets
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {workoutExercises.map((exercise, index) => {
+          const status = getExerciseStatus(exercise);
+          let statusIconName: React.ComponentProps<typeof Icon>["name"] =
+            "circle-outline"; // Default: not-started
+          let statusIconColor = colors.textSecondary;
+          let itemStyle = styles.exerciseListItem;
+
+          if (status === "in-progress") {
+            statusIconName = "circle-slice-5"; // Example icon for in-progress
+            statusIconColor = colors.primary;
+            itemStyle = {
+              ...itemStyle,
+              ...styles.exerciseListItemInProgress,
+            };
+          } else if (status === "completed") {
+            statusIconName = "check-circle";
+            statusIconColor = colors.primary; // Or a success color like green
+            itemStyle = { ...itemStyle, ...styles.exerciseListItemCompleted };
+          }
+
+          // Add active style if it's the current exercise
+          if (index === currentExerciseIndex) {
+            itemStyle = { ...itemStyle, ...styles.exerciseListItemActive };
+          }
+
+          return (
+            <TouchableOpacity
+              key={exercise.id}
+              style={itemStyle}
+              onPress={() => handleSelectExercise(index)}
+            >
+              <View style={styles.exerciseListItemContent}>
+                <Icon
+                  name={statusIconName}
+                  size={18}
+                  color={statusIconColor}
+                  style={styles.statusIcon}
+                />
+                <View style={styles.exerciseListItemTextContainer}>
+                  <Text style={styles.exerciseListName}>{exercise.name}</Text>
+                  <Text style={styles.exerciseListSets}>
+                    {exercise.sets.length} sets
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
         {workoutExercises.length === 0 && (
           <Text style={[styles.placeholderText, { padding: 15 }]}>
             Add exercises to begin.
