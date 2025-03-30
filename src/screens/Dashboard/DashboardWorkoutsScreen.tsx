@@ -4,6 +4,8 @@ import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import Card from "@/components/Card";
 import WorkoutListItem from "@/components/WorkoutListItem";
+import { getAllWorkoutTemplates } from "@/services/storage";
+import { useNavigation } from "@react-navigation/native";
 // Import navigation types if needed
 // import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 // import { DashboardTopTabParamList } from '@/navigation/DashboardTopTabNavigator';
@@ -12,20 +14,18 @@ import WorkoutListItem from "@/components/WorkoutListItem";
 
 const DashboardWorkoutsScreen: React.FC = () => {
   const { colors } = useTheme();
+  const navigation = useNavigation();
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
-    contentContainer: {
-      padding: 16,
-    },
     title: {
+      margin: 16,
       fontSize: 20,
       fontWeight: "bold",
       color: colors.text,
-      marginBottom: 16,
     },
     placeholderText: {
       fontSize: 16,
@@ -35,18 +35,10 @@ const DashboardWorkoutsScreen: React.FC = () => {
     },
   });
 
-  // Dummy data for example
-  const workouts = [
-    { id: "1", name: "Morning Push", exercises: 6, date: "Last Monday" },
-    { id: "2", name: "Leg Annihilation", exercises: 8, date: "Last Wednesday" },
-    { id: "3", name: "Full Body Blast", exercises: 10, date: "Last Friday" },
-  ];
+  const workouts = getAllWorkoutTemplates();
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Your Workout Templates</Text>
       {workouts.length > 0 ? (
         <Card style={{ padding: 0 }}>
@@ -55,9 +47,9 @@ const DashboardWorkoutsScreen: React.FC = () => {
             <WorkoutListItem
               key={workout.id}
               title={workout.name}
-              details={`${workout.exercises} exercises • ${workout.date}`}
+              details={`${workout.exercises.length} exercises • ${workout.date}`}
               actionText="Start"
-              onPress={() => console.log("Start workout:", workout.name)}
+              onPress={() => navigation.navigate("ActiveWorkoyut")}
               iconName="clipboard-play-outline"
               style={{
                 borderBottomWidth:
