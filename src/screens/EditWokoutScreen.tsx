@@ -531,7 +531,6 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     // Delete Button Styles
     deleteButtonContainer: {
       marginTop: 30,
-      paddingHorizontal: 16, // Match scrollview padding
     },
     deleteButton: {
       flexDirection: "row",

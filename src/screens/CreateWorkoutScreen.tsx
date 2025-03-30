@@ -1,13 +1,19 @@
 // src/screens/CreateWorkoutScreen.tsx
-import React, { useState, useLayoutEffect, useCallback } from "react";
+import React, {
+  useState,
+  useLayoutEffect,
+  useCallback,
+  useEffect, // Keep useEffect
+  useRef,
+} from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert, // Use Alert for feedback
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -18,7 +24,16 @@ import AddExerciseModal, {
   Categories,
 } from "@/components/AddExerciseModal";
 import Card from "@/components/Card";
-import { saveWorkoutTemplate, WorkoutSet } from "@/services/storage"; // Import WorkoutSet
+import {
+  saveWorkoutTemplate,
+  WorkoutSet,
+  WorkoutTemplate,
+  saveWorkoutDraft,
+  getWorkoutDraft,
+  clearWorkoutDraft,
+  WorkoutDraft,
+  WorkoutTemplateExercise, // Import this type if defined in storage.ts
+} from "@/services/storage";
 import {
   armsExercises,
   backExercises,
@@ -29,15 +44,22 @@ import {
   shouldersExercises,
 } from "@/constants/exercises";
 import WorkoutTypePicker from "@/components/WorkoutTypePicker";
-import uuid from "react-native-uuid"; // Import uuid
+import uuid from "react-native-uuid";
+import DraggableFlatList, {
+  RenderItemParams,
+  ScaleDecorator,
+} from "react-native-draggable-flatlist";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+// Removed useFocusEffect as it's not needed here
 
-// Define the structure for an exercise within this screen's state
+// Interface for state (ensure WorkoutSet is imported or defined)
 interface WorkoutExercise {
-  id: string; // Exercise ID from master list
+  instanceId: string;
+  id: string;
   name: string;
   category: Categories;
   type: string;
-  sets: WorkoutSet[]; // Use the imported WorkoutSet type
+  sets: WorkoutSet[];
 }
 
 type Props = NativeStackScreenProps<RootStackParamList, "CreateWorkout">;
@@ -65,9 +87,101 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const [workoutName, setWorkoutName] = useState("");
   const [workoutType, setWorkoutType] = useState<string | null>(null);
   const [duration, setDuration] = useState("");
-  // Update state to hold WorkoutExercise[]
   const [addedExercises, setAddedExercises] = useState<WorkoutExercise[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true); // Flag for initial load
+
+  const savedRef = useRef(false);
+
+  // --- Track Unsaved Changes ---
+  useEffect(() => {
+    // Only start tracking changes *after* the initial load/draft restore is complete
+    if (!isInitialLoad) {
+      console.log("Change detected, marking unsaved.");
+      setHasUnsavedChanges(true);
+    }
+  }, [workoutName, workoutType, duration, addedExercises, isInitialLoad]); // Add isInitialLoad dependency
+
+  // --- Load Draft on Mount ---
+  useEffect(() => {
+    const draft = getWorkoutDraft(null); // Check for 'Create New' draft
+    if (draft) {
+      console.log("Found Create New draft:", draft);
+      Alert.alert(
+        "Resume Draft?",
+        "You have an unsaved workout draft. Resume editing?",
+        [
+          {
+            text: "Discard Draft",
+            style: "destructive",
+            onPress: () => {
+              clearWorkoutDraft(null);
+              setIsInitialLoad(false); // Proceed with initial load finished
+            },
+          },
+          {
+            text: "Resume",
+            onPress: () => {
+              setWorkoutName(draft.name);
+              setWorkoutType(draft.type);
+              setDuration(draft.durationEstimate?.toString() || "");
+              // Ensure sets have IDs if they somehow didn't get saved with them
+              const exercisesWithSetIds = draft.exercises.map(ex => ({
+                ...ex,
+                sets: ex.sets.map(set => ({
+                  ...set,
+                  id: set.id || (uuid.v4() as string),
+                })),
+              }));
+              setAddedExercises(exercisesWithSetIds);
+              setIsInitialLoad(false); // Draft loaded, finish initial load phase
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    } else {
+      setIsInitialLoad(false); // No draft, finish initial load phase
+    }
+    savedRef.current = false; // Reset saved ref on mount
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // --- Save Draft on Unmount/Blur (if not saved) ---
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", e => {
+      if (!hasUnsavedChanges || savedRef.current || isInitialLoad) {
+        // Allow navigation if no unsaved changes, already saved, or still loading draft
+        return;
+      }
+
+      e.preventDefault(); // Prevent default back action
+
+      // Save the current state as a draft
+      const currentDraft: WorkoutDraft = {
+        templateId: null,
+        name: workoutName,
+        type: workoutType,
+        durationEstimate: duration ? parseInt(duration, 10) : undefined,
+        exercises: addedExercises,
+        timestamp: Date.now(),
+      };
+      saveWorkoutDraft(currentDraft);
+      console.log("Draft saved on navigating away.");
+
+      navigation.dispatch(e.data.action); // Allow navigation to proceed
+    });
+
+    return unsubscribe; // Cleanup listener on unmount
+  }, [
+    navigation,
+    hasUnsavedChanges,
+    isInitialLoad, // Include isInitialLoad dependency
+    workoutName,
+    workoutType,
+    duration,
+    addedExercises,
+  ]);
 
   // --- Default Set Values ---
   const defaultReps = 12;
@@ -79,9 +193,10 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     const sets: WorkoutSet[] = [];
     for (let i = 0; i < defaultSetCount; i++) {
       sets.push({
-        id: uuid.v4() as string, // Generate unique ID for the set
+        id: uuid.v4() as string,
         reps: defaultReps,
         weight: defaultWeight,
+        // unit: preferences.defaultWeightUnit // Add default unit from theme context if needed
       });
     }
     return sets;
@@ -91,51 +206,52 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const handleAddExercisesFromModal = (selectedExercises: Exercise[]) => {
     const newWorkoutExercises: WorkoutExercise[] = selectedExercises.map(
       ex => ({
-        ...ex, // Spread basic exercise info (id, name, category, type)
-        sets: createDefaultSets(), // Add default sets
+        ...ex,
+        instanceId: uuid.v4() as string,
+        sets: createDefaultSets(),
       })
     );
-
-    // Prevent adding duplicates by ID
-    setAddedExercises(prevExercises => {
-      const existingIds = new Set(prevExercises.map(e => e.id));
-      const uniqueNewExercises = newWorkoutExercises.filter(
-        ne => !existingIds.has(ne.id)
-      );
-      return [...prevExercises, ...uniqueNewExercises];
-    });
+    setAddedExercises(prevExercises => [
+      ...prevExercises,
+      ...newWorkoutExercises,
+    ]);
+    // No need to set hasUnsavedChanges here, the useEffect will catch it
     setIsModalVisible(false);
   };
 
   // --- Remove Exercise ---
-  const removeExercise = (idToRemove: string) => {
-    setAddedExercises(prev => prev.filter(ex => ex.id !== idToRemove));
+  const removeExercise = (instanceIdToRemove: string) => {
+    setAddedExercises(prev =>
+      prev.filter(ex => ex.instanceId !== instanceIdToRemove)
+    );
+    // No need to set hasUnsavedChanges here, the useEffect will catch it
   };
 
-  // --- Add a Set to an Exercise ---
-  const handleAddSet = (exerciseId: string) => {
+  // --- Add Set ---
+  const handleAddSet = (instanceId: string) => {
     setAddedExercises(prevExercises =>
       prevExercises.map(ex => {
-        if (ex.id === exerciseId) {
-          // Add a new default set
+        if (ex.instanceId === instanceId) {
           const newSet: WorkoutSet = {
             id: uuid.v4() as string,
             reps: defaultReps,
             weight: defaultWeight,
+            // unit: preferences.defaultWeightUnit // Add default unit if needed
           };
           return { ...ex, sets: [...ex.sets, newSet] };
         }
         return ex;
       })
     );
+    // No need to set hasUnsavedChanges here, the useEffect will catch it
   };
 
-  // --- Remove a Set from an Exercise ---
-  const handleRemoveSet = (exerciseId: string, setIdToRemove: string) => {
+  // --- Remove Set ---
+  const handleRemoveSet = (instanceId: string, setIdToRemove: string) => {
+    let actuallyRemoved = false;
     setAddedExercises(prevExercises =>
       prevExercises.map(ex => {
-        if (ex.id === exerciseId) {
-          // Prevent removing the last set
+        if (ex.instanceId === instanceId) {
           if (ex.sets.length <= 1) {
             Alert.alert(
               "Cannot Remove",
@@ -143,28 +259,34 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
             );
             return ex;
           }
-          // Filter out the set to remove
+          const originalLength = ex.sets.length;
           const updatedSets = ex.sets.filter(set => set.id !== setIdToRemove);
+          if (updatedSets.length < originalLength) {
+            actuallyRemoved = true; // Mark that a change occurred
+          }
           return { ...ex, sets: updatedSets };
         }
         return ex;
       })
     );
+    // Only trigger unsaved changes if a set was actually removed
+    // if (actuallyRemoved) {
+    //   setHasUnsavedChanges(true); // Let useEffect handle this
+    // }
   };
 
-  // --- Update Reps for a Set ---
+  // --- Update Reps ---
   const handleRepChange = (
-    exerciseId: string,
+    instanceId: string,
     setId: string,
     newReps: string
   ) => {
     const reps = parseInt(newReps, 10);
     setAddedExercises(prevExercises =>
       prevExercises.map(ex => {
-        if (ex.id === exerciseId) {
+        if (ex.instanceId === instanceId) {
           const updatedSets = ex.sets.map(set => {
             if (set.id === setId) {
-              // Update reps, default to 0 if parsing fails or input is empty
               return { ...set, reps: isNaN(reps) ? 0 : reps };
             }
             return set;
@@ -174,21 +296,21 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         return ex;
       })
     );
+    // No need to set hasUnsavedChanges here, the useEffect will catch it
   };
 
-  // --- Update Weight for a Set ---
+  // --- Update Weight ---
   const handleWeightChange = (
-    exerciseId: string,
+    instanceId: string,
     setId: string,
     newWeight: string
   ) => {
     const weight = parseFloat(newWeight);
     setAddedExercises(prevExercises =>
       prevExercises.map(ex => {
-        if (ex.id === exerciseId) {
+        if (ex.instanceId === instanceId) {
           const updatedSets = ex.sets.map(set => {
             if (set.id === setId) {
-              // Update weight, default to 0 if parsing fails or input is empty
               return { ...set, weight: isNaN(weight) ? 0 : weight };
             }
             return set;
@@ -198,10 +320,10 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         return ex;
       })
     );
+    // No need to set hasUnsavedChanges here, the useEffect will catch it
   };
 
   // --- Save Workout Logic ---
-  // Use useCallback to memoize the function for useLayoutEffect dependency
   const handleSaveWorkout = useCallback(() => {
     if (!workoutName.trim()) {
       Alert.alert("Missing Name", "Please enter a name for the workout.");
@@ -215,21 +337,26 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    const templateToSave: WorkoutTemplate = {
-      id: uuid.v4() as string, // Generate unique ID for the template
-      name: workoutName.trim(),
-      type: workoutType,
-      durationEstimate: duration ? parseInt(duration, 10) : undefined,
-      exercises: addedExercises.map(ex => ({
+    // Ensure WorkoutTemplateExercise matches the expected structure for storage
+    const exercisesToSave: WorkoutTemplateExercise[] = addedExercises.map(
+      ex => ({
+        instanceId: ex.instanceId,
         id: ex.id,
-        name: ex.name,
+        name: ex.name, // Assuming name is correct in state
         sets: ex.sets.map(set => ({
-          // Ensure data types are correct
           id: set.id,
           reps: Number(set.reps) || 0,
           weight: Number(set.weight) || 0,
         })),
-      })),
+      })
+    );
+
+    const templateToSave: WorkoutTemplate = {
+      id: uuid.v4() as string,
+      name: workoutName.trim(),
+      type: workoutType,
+      durationEstimate: duration ? parseInt(duration, 10) : undefined,
+      exercises: exercisesToSave,
     };
 
     console.log(
@@ -237,9 +364,114 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       JSON.stringify(templateToSave, null, 2)
     );
     saveWorkoutTemplate(templateToSave);
+    savedRef.current = true; // Mark as saved *before* navigating
+    clearWorkoutDraft(null); // Clear the draft for 'Create New'
     Alert.alert("Success", "Workout template saved!");
-    navigation.goBack(); // Go back after saving
+    navigation.goBack();
   }, [workoutName, workoutType, duration, addedExercises, navigation]);
+
+  // --- Render Item for DraggableFlatList ---
+  const renderExerciseItem = useCallback(
+    ({ item: ex, drag, isActive }: RenderItemParams<WorkoutExercise>) => {
+      return (
+        <ScaleDecorator activeScale={1.04}>
+          <TouchableOpacity
+            onLongPress={drag}
+            disabled={isActive}
+            style={[
+              styles.exerciseCard,
+              { backgroundColor: isActive ? colors.border : colors.card },
+            ]}
+          >
+            {/* Exercise Header */}
+            <View style={styles.exerciseHeader}>
+              <View style={styles.exerciseInfo}>
+                <Text style={styles.exerciseName}>{ex.name}</Text>
+                <Text style={styles.exerciseDetail}>
+                  {ex.type} • {ex.category}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.removeExerciseButton}
+                onPress={() => removeExercise(ex.instanceId)}
+              >
+                <Icon
+                  name="close-circle-outline"
+                  size={22}
+                  color={colors.destructive}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Sets Container */}
+            <View style={styles.setsContainer}>
+              {ex.sets.map((set, setIndex) => (
+                <View key={set.id} style={styles.setRow}>
+                  <Text style={styles.setNumber}>{setIndex + 1}</Text>
+                  {/* Reps Input */}
+                  <View style={styles.setInputContainer}>
+                    <TextInput
+                      style={styles.setInput}
+                      value={set.reps.toString()}
+                      onChangeText={text =>
+                        handleRepChange(ex.instanceId, set.id, text)
+                      }
+                      keyboardType="number-pad"
+                      selectTextOnFocus
+                    />
+                    <Text style={styles.setInputLabel}>reps</Text>
+                  </View>
+                  {/* Weight Input */}
+                  <View style={styles.setInputContainer}>
+                    <TextInput
+                      style={styles.setInput}
+                      value={set.weight.toString()}
+                      onChangeText={text =>
+                        handleWeightChange(ex.instanceId, set.id, text)
+                      }
+                      keyboardType="numeric"
+                      selectTextOnFocus
+                    />
+                    <Text style={styles.setInputLabel}>kg</Text>
+                    {/* Add unit preference later */}
+                  </View>
+                  {/* Remove Set Button */}
+                  <TouchableOpacity
+                    style={styles.removeSetButton}
+                    onPress={() => handleRemoveSet(ex.instanceId, set.id)}
+                    disabled={ex.sets.length <= 1}
+                  >
+                    <Icon
+                      name="minus-circle-outline"
+                      size={20}
+                      color={
+                        ex.sets.length <= 1 ? colors.border : colors.destructive
+                      }
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+
+            {/* Add Set Button */}
+            <TouchableOpacity
+              style={styles.addSetButton}
+              onPress={() => handleAddSet(ex.instanceId)}
+            >
+              <Icon
+                name="plus-circle-outline"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.addSetButtonText}>Add Set</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </ScaleDecorator>
+      );
+    },
+    [colors] // Removed handlers from here, they don't change
+    // If handlers *did* depend on state outside of setAddedExercises, they'd need to be here or memoized separately
+  );
 
   // --- Add Save Button to Header ---
   useLayoutEffect(() => {
@@ -256,7 +488,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, handleSaveWorkout, colors]); // Add dependencies
+  }, [navigation, handleSaveWorkout, colors]); // handleSaveWorkout is memoized
 
   // --- Styles ---
   const styles = StyleSheet.create({
@@ -266,7 +498,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     },
     scrollContent: {
       padding: 16,
-      paddingBottom: 50, // Ensure space at bottom
+      paddingBottom: 50,
     },
     sectionTitle: {
       fontSize: 18,
@@ -313,9 +545,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       paddingVertical: 12,
       fontSize: 16,
     },
-    exercisesContainer: {
-      marginTop: 10,
-    },
+    // Removed exercisesContainer as DraggableFlatList handles the list area
     placeholderContainer: {
       alignItems: "center",
       justifyContent: "center",
@@ -337,7 +567,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       borderRadius: 8,
       borderWidth: 1,
       borderColor: colors.border,
-      marginTop: 15, // Margin for button below placeholder or list
+      marginTop: 15,
     },
     addExerciseButtonText: {
       color: colors.primary,
@@ -345,20 +575,19 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       fontWeight: "500",
       marginLeft: 8,
     },
-    // Exercise Item Styling
     exerciseCard: {
-      backgroundColor: colors.card,
+      // backgroundColor set dynamically in renderItem
       borderRadius: 8,
       marginBottom: 15,
       borderWidth: 1,
       borderColor: colors.border,
-      overflow: "hidden", // Clip content
+      overflow: "hidden",
     },
     exerciseHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: colors.background, // Slightly different bg for header
+      backgroundColor: colors.background,
       paddingVertical: 10,
       paddingHorizontal: 15,
       borderBottomWidth: 1,
@@ -381,7 +610,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     removeExerciseButton: {
       padding: 5,
     },
-    // Sets Area Styling
     setsContainer: {
       paddingHorizontal: 15,
       paddingTop: 10,
@@ -394,7 +622,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       paddingVertical: 5,
     },
     setNumber: {
-      width: 30, // Fixed width for alignment
+      width: 30,
       fontSize: 14,
       color: colors.textSecondary,
       marginRight: 10,
@@ -404,27 +632,27 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.background, // Input background
+      backgroundColor: colors.background,
       borderRadius: 6,
       borderWidth: 1,
       borderColor: colors.border,
       paddingHorizontal: 8,
-      marginHorizontal: 5, // Space between inputs
+      marginHorizontal: 5,
     },
     setInput: {
-      flex: 1, // Take remaining space
+      flex: 1,
       fontSize: 14,
       color: colors.text,
-      paddingVertical: 8, // Adjust padding
+      paddingVertical: 8,
       textAlign: "center",
     },
     setInputLabel: {
       fontSize: 14,
       color: colors.textSecondary,
-      marginLeft: 4, // Space between input and label (kg/reps)
+      marginLeft: 4,
     },
     removeSetButton: {
-      paddingLeft: 10, // Space before the remove icon
+      paddingLeft: 10,
       paddingVertical: 5,
     },
     addSetButton: {
@@ -442,7 +670,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       fontWeight: "500",
       marginLeft: 5,
     },
-    // Header Button Styles
     saveButton: {
       flexDirection: "row",
       alignItems: "center",
@@ -461,163 +688,79 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <>
-      <ScrollView
-        style={styles.container}
+      <DraggableFlatList
+        data={addedExercises}
+        renderItem={renderExerciseItem}
+        keyExtractor={item => item.instanceId}
+        onDragEnd={({ data }) => {
+          setAddedExercises(data);
+        }}
+        containerStyle={styles.container}
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.sectionTitle}>Workout Details</Text>
-        <Card style={{ padding: 15 }}>
-          {/* Workout Name */}
-          <View style={{ marginBottom: 15 }}>
-            <Text style={styles.inputLabel}>Workout Name *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g., Upper Body Strength"
-              placeholderTextColor={colors.textSecondary}
-              value={workoutName}
-              onChangeText={setWorkoutName}
-            />
-          </View>
-
-          <View style={styles.row}>
-            {/* Workout Type */}
-            <View style={[styles.inputGroup, { marginRight: 8 }]}>
-              <Text style={styles.inputLabel}>Workout Type</Text>
-              <WorkoutTypePicker
-                options={workoutTypeOptions}
-                selectedValue={workoutType}
-                onValueChange={setWorkoutType}
-                placeholder="Select type"
-              />
-            </View>
-
-            {/* Duration */}
-            <View style={[styles.inputGroup, { marginLeft: 8 }]}>
-              <Text style={styles.inputLabel}>Est. Duration (min)</Text>
-              <View style={styles.durationInputContainer}>
+        ListHeaderComponent={
+          <>
+            <Text style={styles.sectionTitle}>Workout Details</Text>
+            <Card style={{ marginHorizontal: 0 }}>
+              <View style={{ marginBottom: 15 }}>
+                <Text style={styles.inputLabel}>Workout Name *</Text>
                 <TextInput
-                  style={styles.durationInput}
-                  placeholder="e.g., 60"
+                  style={styles.textInput}
+                  placeholder="e.g., Upper Body Strength"
                   placeholderTextColor={colors.textSecondary}
-                  value={duration}
-                  onChangeText={setDuration}
-                  keyboardType="numeric"
-                />
-                <Icon
-                  name="clock-outline"
-                  size={20}
-                  color={colors.textSecondary}
+                  value={workoutName}
+                  onChangeText={setWorkoutName}
                 />
               </View>
-            </View>
-          </View>
-        </Card>
-
-        <Text style={styles.sectionTitle}>Exercises *</Text>
-
-        {addedExercises.length === 0 ? (
-          <View style={styles.placeholderContainer}>
-            <Icon name="dumbbell" size={40} color={colors.textSecondary} />
-            <Text style={styles.placeholderText}>No exercises added yet</Text>
-            <TouchableOpacity
-              style={styles.addExerciseButton}
-              onPress={() => setIsModalVisible(true)}
-            >
-              <Icon name="plus" size={20} color={colors.primary} />
-              <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.exercisesContainer}>
-            {addedExercises.map((ex, exIndex) => (
-              <View key={ex.id} style={styles.exerciseCard}>
-                {/* Exercise Header */}
-                <View style={styles.exerciseHeader}>
-                  <View style={styles.exerciseInfo}>
-                    <Text style={styles.exerciseName}>{ex.name}</Text>
-                    <Text style={styles.exerciseDetail}>
-                      {ex.type} • {ex.category}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.removeExerciseButton}
-                    onPress={() => removeExercise(ex.id)}
-                  >
-                    <Icon
-                      name="close-circle-outline"
-                      size={22}
-                      color={colors.destructive}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Sets Container */}
-                <View style={styles.setsContainer}>
-                  {ex.sets.map((set, setIndex) => (
-                    <View key={set.id} style={styles.setRow}>
-                      <Text style={styles.setNumber}>{setIndex + 1}</Text>
-                      {/* Reps Input */}
-                      <View style={styles.setInputContainer}>
-                        <TextInput
-                          style={styles.setInput}
-                          value={set.reps.toString()}
-                          onChangeText={text =>
-                            handleRepChange(ex.id, set.id, text)
-                          }
-                          keyboardType="number-pad" // Use number-pad for easier input
-                          selectTextOnFocus
-                        />
-                        <Text style={styles.setInputLabel}>reps</Text>
-                      </View>
-                      {/* Weight Input */}
-                      <View style={styles.setInputContainer}>
-                        <TextInput
-                          style={styles.setInput}
-                          value={set.weight.toString()}
-                          onChangeText={text =>
-                            handleWeightChange(ex.id, set.id, text)
-                          }
-                          keyboardType="numeric" // Allows decimals
-                          selectTextOnFocus
-                        />
-                        <Text style={styles.setInputLabel}>kg</Text>
-                      </View>
-                      {/* Remove Set Button */}
-                      <TouchableOpacity
-                        style={styles.removeSetButton}
-                        onPress={() => handleRemoveSet(ex.id, set.id)}
-                        disabled={ex.sets.length <= 1} // Disable if only one set
-                      >
-                        <Icon
-                          name="minus-circle-outline"
-                          size={20}
-                          color={
-                            ex.sets.length <= 1
-                              ? colors.border // Dimmed color when disabled
-                              : colors.destructive
-                          }
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Add Set Button */}
-                <TouchableOpacity
-                  style={styles.addSetButton}
-                  onPress={() => handleAddSet(ex.id)}
-                >
-                  <Icon
-                    name="plus-circle-outline"
-                    size={18}
-                    color={colors.primary}
+              <View style={styles.row}>
+                <View style={[styles.inputGroup, { marginRight: 8 }]}>
+                  <Text style={styles.inputLabel}>Workout Type</Text>
+                  <WorkoutTypePicker
+                    options={workoutTypeOptions}
+                    selectedValue={workoutType}
+                    onValueChange={setWorkoutType}
+                    placeholder="Select type"
                   />
-                  <Text style={styles.addSetButtonText}>Add Set</Text>
+                </View>
+                <View style={[styles.inputGroup, { marginLeft: 8 }]}>
+                  <Text style={styles.inputLabel}>Est. Duration (min)</Text>
+                  <View style={styles.durationInputContainer}>
+                    <TextInput
+                      style={styles.durationInput}
+                      placeholder="e.g., 60"
+                      placeholderTextColor={colors.textSecondary}
+                      value={duration}
+                      onChangeText={setDuration}
+                      keyboardType="numeric"
+                    />
+                    <Icon
+                      name="clock-outline"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+                </View>
+              </View>
+            </Card>
+            <Text style={styles.sectionTitle}>Exercises *</Text>
+            {addedExercises.length === 0 && !isInitialLoad ? ( // Show placeholder only if empty AND initial load is done
+              <View style={styles.placeholderContainer}>
+                <Icon name="dumbbell" size={40} color={colors.textSecondary} />
+                <Text style={styles.placeholderText}>
+                  No exercises added yet
+                </Text>
+                <TouchableOpacity
+                  style={styles.addExerciseButton}
+                  onPress={() => setIsModalVisible(true)}
+                >
+                  <Icon name="plus" size={20} color={colors.primary} />
+                  <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
                 </TouchableOpacity>
               </View>
-            ))}
-            {/* Button to add more exercises below the list */}
+            ) : null}
+          </>
+        }
+        ListFooterComponent={
+          addedExercises.length > 0 ? (
             <TouchableOpacity
               style={styles.addExerciseButton}
               onPress={() => setIsModalVisible(true)}
@@ -627,11 +770,17 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
                 Add More Exercises
               </Text>
             </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Add Exercise Modal */}
+          ) : null
+        }
+        ListEmptyComponent={
+          isInitialLoad ? (
+            <ActivityIndicator
+              style={{ marginTop: 50 }}
+              color={colors.primary}
+            />
+          ) : null
+        }
+      />
       <AddExerciseModal
         visible={isModalVisible}
         onClose={() => setIsModalVisible(false)}

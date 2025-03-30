@@ -10,6 +10,7 @@ import AppNavigator from "@/navigation/AppNavigator"; // Using path alias
 import { StatusBar } from "expo-status-bar";
 import { ThemeProvider, useTheme } from "@/theme/ThemeContext"; // Using path alias
 import { MMKV } from "react-native-mmkv";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export const mmkv = new MMKV();
 
@@ -57,9 +58,11 @@ const ThemedApp = () => {
 // Main App component wraps everything in the ThemeProvider
 const App = () => {
   return (
-    <ThemeProvider>
-      <ThemedApp />
-    </ThemeProvider>
+    <GestureHandlerRootView>
+      <ThemeProvider>
+        <ThemedApp />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 };
 

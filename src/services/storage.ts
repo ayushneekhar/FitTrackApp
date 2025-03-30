@@ -9,13 +9,20 @@ export interface WorkoutSet {
   id: string;
   reps: number;
   weight: number;
-  unit: WeightUnit; // Unit is part of the set during an active workout
+  unit: WeightUnit;
 }
 
 export interface UserGoals {
   weeklyWorkouts: number;
   weeklyActiveDays: number;
-  weeklyVolumeKg: number; // Store volume goal in a consistent unit (e.g., kg)
+  weeklyVolumeKg: number;
+}
+
+export interface WorkoutTemplateExercise {
+  instanceId: string;
+  id: string;
+  name: string;
+  sets: Array<{ id: string; reps: number; weight: number }>;
 }
 
 export interface WorkoutTemplate {
@@ -23,11 +30,19 @@ export interface WorkoutTemplate {
   name: string;
   type: string | null;
   durationEstimate?: number;
-  exercises: Array<{
+  exercises: Array<WorkoutTemplateExercise>;
+}
+
+export interface CompletedWorkoutExercise {
+  instanceId: string;
+  id: string;
+  name: string;
+  sets: Array<{
     id: string;
-    name: string;
-    // Template sets might not need a unit, it's decided during the workout
-    sets: Array<{ id: string; reps: number; weight: number }>;
+    reps: number;
+    weight: number;
+    completed: boolean;
+    unit: WeightUnit;
   }>;
 }
 
@@ -38,18 +53,8 @@ export interface CompletedWorkout {
   startTime: number;
   endTime: number;
   durationSeconds: number;
-  notes?: string; // <-- Add optional notes field
-  exercises: Array<{
-    id: string;
-    name: string;
-    sets: Array<{
-      id: string; // <-- Add ID to completed sets for editing
-      reps: number;
-      weight: number;
-      completed: boolean; // Keep track if the set was marked done
-      unit: WeightUnit;
-    }>;
-  }>;
+  notes?: string;
+  exercises: Array<CompletedWorkoutExercise>;
 }
 
 export interface ActiveWorkoutSession {
@@ -66,6 +71,15 @@ export interface UserPreferences {
 
 export const storage = new MMKV();
 
+export interface WorkoutDraft {
+  templateId: string | null; // null for 'Create New', ID for 'Edit'
+  name: string;
+  type: string | null;
+  durationEstimate?: number;
+  exercises: WorkoutTemplateExercise[]; // Use the same exercise structure as template
+  timestamp: number; // When the draft was saved
+}
+
 // --- Storage Keys ---
 const STORAGE_KEYS = {
   WORKOUT_TEMPLATES: "workoutTemplates",
@@ -74,6 +88,8 @@ const STORAGE_KEYS = {
   LAST_USED_TIMESTAMPS: "lastUsedTimestamps",
   USER_PREFERENCES: "userPreferences",
   USER_GOALS: "userGoals",
+  WORKOUT_DRAFT_CREATE: "workoutDraft_create",
+  WORKOUT_DRAFT_EDIT_PREFIX: "workoutDraft_edit_",
 };
 
 // --- Helper Functions (getArray, saveArray, getObject, saveObject) ---
@@ -127,27 +143,30 @@ const saveObject = <T extends object>(key: string, data: T): void => {
 export const getAllWorkoutTemplates = (): WorkoutTemplate[] => {
   return getArray<WorkoutTemplate>(STORAGE_KEYS.WORKOUT_TEMPLATES);
 };
+
 export const saveWorkoutTemplate = (templateToSave: WorkoutTemplate): void => {
   const templates = getAllWorkoutTemplates();
   const index = templates.findIndex(t => t.id === templateToSave.id);
 
+  // Ensure all exercises and sets have necessary IDs
+  templateToSave.exercises.forEach(ex => {
+    ex.instanceId = ex.instanceId || (uuid.v4() as string); // Assign instanceId if missing
+    ex.sets = ex.sets.map(set => ({
+      ...set,
+      id: set.id || (uuid.v4() as string),
+    }));
+  });
+
   if (index === -1) {
-    // Ensure sets have IDs if creating new
-    templateToSave.exercises.forEach(ex => {
-      ex.sets = ex.sets.map(set => ({ ...set, id: set.id || uuid.v4() }));
-    });
     templates.push(templateToSave);
     console.log("Saving new template:", templateToSave.id);
   } else {
-    // Ensure sets have IDs if updating
-    templateToSave.exercises.forEach(ex => {
-      ex.sets = ex.sets.map(set => ({ ...set, id: set.id || uuid.v4() }));
-    });
     templates[index] = templateToSave;
     console.log("Updating existing template:", templateToSave.id);
   }
   saveArray(STORAGE_KEYS.WORKOUT_TEMPLATES, templates);
 };
+
 export const deleteWorkoutTemplate = (templateId: string): void => {
   let templates = getAllWorkoutTemplates();
   templates = templates.filter(t => t.id !== templateId);
@@ -174,14 +193,15 @@ export const getWorkoutHistory = (): CompletedWorkout[] => {
 
 export const saveCompletedWorkout = (workout: CompletedWorkout): void => {
   const history = getWorkoutHistory();
-  // Ensure sets have IDs when saving
+  // Ensure all exercises and sets have necessary IDs
   workout.exercises.forEach(ex => {
+    ex.instanceId = ex.instanceId || (uuid.v4() as string); // Assign instanceId if missing
     ex.sets = ex.sets.map(set => ({
       ...set,
-      id: set.id || (uuid.v4() as string), // Assign ID if missing
+      id: set.id || (uuid.v4() as string),
     }));
   });
-  history.unshift(workout); // Add to the beginning (newest)
+  history.unshift(workout);
   saveArray(STORAGE_KEYS.WORKOUT_HISTORY, history);
 };
 
@@ -193,18 +213,18 @@ export const getCompletedWorkoutById = (
   return history.find(w => w.id === workoutId) || null;
 };
 
-// --- NEW: Update Completed Workout ---
 export const updateCompletedWorkout = (
   updatedWorkout: CompletedWorkout
 ): void => {
   const history = getWorkoutHistory();
   const index = history.findIndex(w => w.id === updatedWorkout.id);
   if (index !== -1) {
-    // Ensure sets have IDs when updating
+    // Ensure IDs exist on update
     updatedWorkout.exercises.forEach(ex => {
+      ex.instanceId = ex.instanceId || (uuid.v4() as string);
       ex.sets = ex.sets.map(set => ({
         ...set,
-        id: set.id || (uuid.v4() as string), // Assign ID if missing
+        id: set.id || (uuid.v4() as string),
       }));
     });
     history[index] = updatedWorkout;
@@ -218,7 +238,6 @@ export const updateCompletedWorkout = (
   }
 };
 
-// --- NEW: Delete Completed Workout ---
 export const deleteCompletedWorkout = (workoutId: string): void => {
   let history = getWorkoutHistory();
   history = history.filter(w => w.id !== workoutId);
@@ -230,7 +249,6 @@ export const clearWorkoutHistory = (): void => {
   storage.delete(STORAGE_KEYS.WORKOUT_HISTORY);
 };
 
-// --- Active Workout Session Functions ---
 export const saveActiveWorkoutSession = (
   session: ActiveWorkoutSession | null
 ): void => {
@@ -277,7 +295,6 @@ export const clearActiveWorkoutSession = (): void => {
   console.log("Active session explicitly cleared.");
 };
 
-// --- Last Used Timestamp Functions ---
 export const getLastUsedTimestamps = (): Record<string, number> => {
   return (
     getObject<Record<string, number>>(STORAGE_KEYS.LAST_USED_TIMESTAMPS) || {}
@@ -293,7 +310,6 @@ export const saveLastUsedTimestamp = (
   console.log(`Saved last used timestamp for template ${templateId}`);
 };
 
-// --- User Preferences Functions ---
 export const getUserPreferences = (): UserPreferences => {
   const defaults: UserPreferences = {
     defaultWeightUnit: "kg",
@@ -305,8 +321,6 @@ export const saveUserPreferences = (prefs: UserPreferences): void => {
   saveObject(STORAGE_KEYS.USER_PREFERENCES, prefs);
   console.log("User preferences saved:", prefs);
 };
-
-// --- NEW: User Goals Functions ---
 
 /**
  * Retrieves user goals from storage.
@@ -354,4 +368,51 @@ export const saveUserGoals = (goals: UserGoals): void => {
   };
   saveObject(STORAGE_KEYS.USER_GOALS, goalsToSave);
   console.log("User goals saved:", goalsToSave);
+};
+
+export const saveWorkoutDraft = (draft: WorkoutDraft): void => {
+  draft.timestamp = Date.now(); // Update timestamp on save
+  if (draft.templateId === null) {
+    // Save as 'Create New' draft
+    saveObject(STORAGE_KEYS.WORKOUT_DRAFT_CREATE, draft);
+    console.log("Create New workout draft saved.");
+  } else {
+    // Save as 'Edit' draft using templateId in the key
+    saveObject(
+      `${STORAGE_KEYS.WORKOUT_DRAFT_EDIT_PREFIX}${draft.templateId}`,
+      draft
+    );
+    console.log(`Edit workout draft saved for template: ${draft.templateId}`);
+  }
+};
+
+/**
+ * Retrieves a workout draft.
+ * @param templateId - The ID of the template being edited, or null for the 'Create New' draft.
+ * @returns The WorkoutDraft object or null if no matching draft exists.
+ */
+export const getWorkoutDraft = (
+  templateId: string | null
+): WorkoutDraft | null => {
+  if (templateId === null) {
+    return getObject<WorkoutDraft>(STORAGE_KEYS.WORKOUT_DRAFT_CREATE);
+  } else {
+    return getObject<WorkoutDraft>(
+      `${STORAGE_KEYS.WORKOUT_DRAFT_EDIT_PREFIX}${templateId}`
+    );
+  }
+};
+
+/**
+ * Clears a specific workout draft.
+ * @param templateId - The ID of the template draft to clear, or null for the 'Create New' draft.
+ */
+export const clearWorkoutDraft = (templateId: string | null): void => {
+  if (templateId === null) {
+    storage.delete(STORAGE_KEYS.WORKOUT_DRAFT_CREATE);
+    console.log("Create New workout draft cleared.");
+  } else {
+    storage.delete(`${STORAGE_KEYS.WORKOUT_DRAFT_EDIT_PREFIX}${templateId}`);
+    console.log(`Edit workout draft cleared for template: ${templateId}`);
+  }
 };

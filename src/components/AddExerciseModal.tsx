@@ -1,5 +1,5 @@
 // src/components/AddExerciseModal.tsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -267,7 +267,6 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Search Input */}
           <View style={styles.searchContainer}>
             <Icon name="magnify" size={20} color={colors.textSecondary} />
             <TextInput
@@ -279,7 +278,6 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
             />
           </View>
 
-          {/* Categories */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -308,7 +306,6 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
             )}
           </ScrollView>
 
-          {/* Exercise List */}
           <FlatList
             data={filteredExercises}
             renderItem={renderExerciseItem}
@@ -328,7 +325,6 @@ const AddExerciseModal: React.FC<AddExerciseModalProps> = ({
             }
           />
 
-          {/* Footer Buttons */}
           <View style={styles.footer}>
             <TouchableOpacity
               style={[styles.footerButton, styles.cancelButton]}
