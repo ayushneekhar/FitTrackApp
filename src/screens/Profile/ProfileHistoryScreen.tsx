@@ -35,11 +35,7 @@ const ProfileHistoryScreen: React.FC = () => {
   useFocusEffect(loadHistory);
 
   const handleViewWorkout = (workoutId: string) => {
-    console.log("Navigate to view completed workout:", workoutId);
-    Alert.alert(
-      "Not Implemented",
-      "Viewing completed workout details is not yet implemented."
-    );
+    navigation.navigate("WorkoutDetails", { workoutId: workoutId });
   };
 
   const styles = StyleSheet.create({
