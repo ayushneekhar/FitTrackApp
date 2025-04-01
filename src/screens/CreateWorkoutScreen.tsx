@@ -49,6 +49,7 @@ import DraggableFlatList, {
   ScaleDecorator,
 } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 // Removed useFocusEffect as it's not needed here
 
 // Interface for state (ensure WorkoutSet is imported or defined)
@@ -92,6 +93,11 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const [isInitialLoad, setIsInitialLoad] = useState(true); // Flag for initial load
 
   const savedRef = useRef(false);
+  const addExerciseModalRef = useRef<BottomSheetModal>(null);
+
+  const handlePresentModalPress = useCallback(() => {
+    addExerciseModalRef.current?.present();
+  }, []);
 
   useEffect(() => {
     if (!isInitialLoad) {
@@ -205,8 +211,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       ...prevExercises,
       ...newWorkoutExercises,
     ]);
-    // No need to set hasUnsavedChanges here, the useEffect will catch it
-    setIsModalVisible(false);
   };
 
   // --- Remove Exercise ---
@@ -739,7 +743,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
                 </Text>
                 <TouchableOpacity
                   style={styles.addExerciseButton}
-                  onPress={() => setIsModalVisible(true)}
+                  onPress={handlePresentModalPress}
                 >
                   <Icon name="plus" size={20} color={colors.primary} />
                   <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
@@ -752,7 +756,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
           addedExercises.length > 0 ? (
             <TouchableOpacity
               style={styles.addExerciseButton}
-              onPress={() => setIsModalVisible(true)}
+              onPress={handlePresentModalPress}
             >
               <Icon name="plus" size={20} color={colors.primary} />
               <Text style={styles.addExerciseButtonText}>
@@ -771,8 +775,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         }
       />
       <AddExerciseModal
-        visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
+        ref={addExerciseModalRef}
         onAddExercises={handleAddExercisesFromModal}
         allExercises={DUMMY_EXERCISES}
       />

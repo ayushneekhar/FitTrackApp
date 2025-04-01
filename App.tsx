@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { ThemeProvider, useTheme } from "@/theme/ThemeContext"; // Using path alias
 import { MMKV } from "react-native-mmkv";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 
 export const mmkv = new MMKV();
 
@@ -48,9 +49,11 @@ const ThemedApp = () => {
   return (
     <SafeAreaProvider>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
-      <NavigationContainer theme={navigationTheme}>
-        <AppNavigator />
-      </NavigationContainer>
+      <BottomSheetModalProvider>
+        <NavigationContainer theme={navigationTheme}>
+          <AppNavigator />
+        </NavigationContainer>
+      </BottomSheetModalProvider>
     </SafeAreaProvider>
   );
 };
