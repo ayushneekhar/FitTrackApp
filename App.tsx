@@ -58,7 +58,7 @@ const ThemedApp = () => {
 // Main App component wraps everything in the ThemeProvider
 const App = () => {
   return (
-    <GestureHandlerRootView>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <ThemedApp />
       </ThemeProvider>

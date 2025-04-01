@@ -1,9 +1,8 @@
-// src/screens/CreateWorkoutScreen.tsx
 import React, {
   useState,
   useLayoutEffect,
   useCallback,
-  useEffect, // Keep useEffect
+  useEffect,
   useRef,
 } from "react";
 import {
@@ -32,7 +31,7 @@ import {
   getWorkoutDraft,
   clearWorkoutDraft,
   WorkoutDraft,
-  WorkoutTemplateExercise, // Import this type if defined in storage.ts
+  WorkoutTemplateExercise,
 } from "@/services/storage";
 import {
   armsExercises,
@@ -94,18 +93,14 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
 
   const savedRef = useRef(false);
 
-  // --- Track Unsaved Changes ---
   useEffect(() => {
-    // Only start tracking changes *after* the initial load/draft restore is complete
     if (!isInitialLoad) {
-      console.log("Change detected, marking unsaved.");
       setHasUnsavedChanges(true);
     }
-  }, [workoutName, workoutType, duration, addedExercises, isInitialLoad]); // Add isInitialLoad dependency
+  }, [workoutName, workoutType, duration, addedExercises, isInitialLoad]);
 
-  // --- Load Draft on Mount ---
   useEffect(() => {
-    const draft = getWorkoutDraft(null); // Check for 'Create New' draft
+    const draft = getWorkoutDraft(null);
     if (draft) {
       console.log("Found Create New draft:", draft);
       Alert.alert(
@@ -117,7 +112,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
             style: "destructive",
             onPress: () => {
               clearWorkoutDraft(null);
-              setIsInitialLoad(false); // Proceed with initial load finished
+              setIsInitialLoad(false);
             },
           },
           {
@@ -126,7 +121,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
               setWorkoutName(draft.name);
               setWorkoutType(draft.type);
               setDuration(draft.durationEstimate?.toString() || "");
-              // Ensure sets have IDs if they somehow didn't get saved with them
               const exercisesWithSetIds = draft.exercises.map(ex => ({
                 ...ex,
                 sets: ex.sets.map(set => ({
@@ -135,29 +129,26 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
                 })),
               }));
               setAddedExercises(exercisesWithSetIds);
-              setIsInitialLoad(false); // Draft loaded, finish initial load phase
+              setIsInitialLoad(false);
             },
           },
         ],
         { cancelable: false }
       );
     } else {
-      setIsInitialLoad(false); // No draft, finish initial load phase
+      setIsInitialLoad(false);
     }
-    savedRef.current = false; // Reset saved ref on mount
-  }, []); // Empty dependency array ensures this runs only once on mount
+    savedRef.current = false;
+  }, []);
 
-  // --- Save Draft on Unmount/Blur (if not saved) ---
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", e => {
       if (!hasUnsavedChanges || savedRef.current || isInitialLoad) {
-        // Allow navigation if no unsaved changes, already saved, or still loading draft
         return;
       }
 
-      e.preventDefault(); // Prevent default back action
+      e.preventDefault();
 
-      // Save the current state as a draft
       const currentDraft: WorkoutDraft = {
         templateId: null,
         name: workoutName,
@@ -169,21 +160,20 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       saveWorkoutDraft(currentDraft);
       console.log("Draft saved on navigating away.");
 
-      navigation.dispatch(e.data.action); // Allow navigation to proceed
+      navigation.dispatch(e.data.action);
     });
 
-    return unsubscribe; // Cleanup listener on unmount
+    return unsubscribe;
   }, [
     navigation,
     hasUnsavedChanges,
-    isInitialLoad, // Include isInitialLoad dependency
+    isInitialLoad,
     workoutName,
     workoutType,
     duration,
     addedExercises,
   ]);
 
-  // --- Default Set Values ---
   const defaultReps = 12;
   const defaultWeight = 0;
   const defaultSetCount = 3;
@@ -469,8 +459,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         </ScaleDecorator>
       );
     },
-    [colors] // Removed handlers from here, they don't change
-    // If handlers *did* depend on state outside of setAddedExercises, they'd need to be here or memoized separately
+    [colors]
   );
 
   // --- Add Save Button to Header ---

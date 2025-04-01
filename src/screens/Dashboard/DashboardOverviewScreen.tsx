@@ -22,7 +22,8 @@ import {
   CompletedWorkout,
   ActiveWorkoutSession,
   getActiveWorkoutSession,
-  WeightUnit, // Import WeightUnit if needed for PR interface
+  WeightUnit,
+  clearActiveWorkoutSession,
 } from "@/services/storage";
 import { formatDuration, formatRelativeDate } from "@/utils/formatters";
 import { calculateWeeklyStats } from "@/utils/calculations"; // Keep this
@@ -124,6 +125,13 @@ const DashboardOverviewScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handleDeleteActiveWorkout = () => {
+    if (activeSession) {
+      clearActiveWorkoutSession();
+      setActiveSession(null);
+    }
+  };
+
   // --- Styles ---
   const styles = StyleSheet.create({
     // ... (keep existing styles for container, cards, headers, stats, progress, resume etc.) ...
@@ -216,6 +224,12 @@ const DashboardOverviewScreen: React.FC<Props> = ({ navigation }) => {
       paddingHorizontal: 15,
       borderRadius: 6,
     },
+    deleteButton: {
+      backgroundColor: colors.destructive,
+      padding: 8,
+      borderRadius: 6,
+      marginLeft: 8,
+    },
     resumeButtonText: {
       color: colors.primary,
       fontWeight: "bold",
@@ -296,6 +310,12 @@ const DashboardOverviewScreen: React.FC<Props> = ({ navigation }) => {
               onPress={handleResumeWorkout}
             >
               <Text style={styles.resumeButtonText}>Resume</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDeleteActiveWorkout}
+            >
+              <Icon name="delete" size={20} color={colors.background} />
             </TouchableOpacity>
           </View>
         </Card>
