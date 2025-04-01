@@ -1,5 +1,13 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
+# Keystore files
+*.keystore
+*.jks
+
+keystore.properties
+android/keystore.properties
+android/app/keystore.properties
+
 # dependencies
 node_modules/
 
