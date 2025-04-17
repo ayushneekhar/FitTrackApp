@@ -33,6 +33,16 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import uuid from "react-native-uuid";
 import { formatDuration } from "@/utils/formatters";
 import Card from "@/components/Card";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  FadeOutDown,
+  FadeOutUp,
+  SlideInDown,
+  SlideOutUp,
+} from "react-native-reanimated";
+import AnimatedTimer from "@/components/AnimatedTimer";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ActiveWorkout">;
 
@@ -395,7 +405,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       headerTitleAlign: "left",
       headerLeft: () => (
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPressIn={() => navigation.goBack()}
           style={{ padding: 5, marginLeft: 10 }}
         >
           <Icon name="arrow-left" size={24} color={colors.text} />
@@ -403,7 +413,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       ),
       headerRight: () => (
         <TouchableOpacity
-          onPress={handleFinishWorkout}
+          onPressIn={handleFinishWorkout}
           style={styles.finishButton}
         >
           <Icon
@@ -459,13 +469,6 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       fontSize: 14,
       color: colors.textSecondary,
       marginBottom: 4,
-    },
-    timerDisplay: {
-      fontSize: 48, // Large timer display
-      fontWeight: "bold",
-      color: colors.text,
-      marginBottom: 15,
-      fontVariant: ["tabular-nums"], // Keep numbers aligned
     },
     timerControls: {
       flexDirection: "row",
@@ -758,9 +761,9 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.timerSection}>
         {/* ... timer display and buttons ... */}
         <Text style={styles.timerLabel}>Workout Timer</Text>
-        <Text style={styles.timerDisplay}>
-          {formatDuration(elapsedSeconds)}
-        </Text>
+        <View style={{ flexDirection: "row" }}>
+          <AnimatedTimer elapsedSeconds={elapsedSeconds} />
+        </View>
         <View style={styles.timerControls}>
           <TouchableOpacity
             style={[

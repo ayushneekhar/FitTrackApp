@@ -84,7 +84,7 @@ const AppNavigator = () => {
           headerRight: () => (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <TouchableOpacity
-                onPress={() => navigation.navigate("NewWorkout")} // Or maybe CreateWorkout directly?
+                onPressIn={() => navigation.navigate("NewWorkout")} // Or maybe CreateWorkout directly?
                 style={styles.newWorkoutButton}
               >
                 <Icon
@@ -96,7 +96,7 @@ const AppNavigator = () => {
                 <Text style={styles.newWorkoutButtonText}>New Workout</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => navigation.navigate("Profile")}
+                onPressIn={() => navigation.navigate("Profile")}
                 style={[
                   styles.headerIconTouchable,
                   { marginLeft: 15, marginRight: 5 },
@@ -121,7 +121,7 @@ const AppNavigator = () => {
           title: "Profile",
           headerRight: () => (
             <TouchableOpacity
-              onPress={() => navigation.navigate("Settings")}
+              onPressIn={() => navigation.navigate("Settings")}
               style={[styles.headerIconTouchable, { marginRight: 10 }]}
             >
               <Icon name="cog-outline" size={24} style={styles.headerIcon} />
