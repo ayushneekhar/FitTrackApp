@@ -15,7 +15,7 @@ import {
   Alert,
   TextInput,
 } from "react-native";
-import { useTheme } from "@/theme/ThemeContext"; // Import useTheme
+import { useTheme } from "@/theme/ThemeContext";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "@/navigation/AppNavigator";
 import Card from "@/components/Card";
@@ -28,11 +28,13 @@ import {
   WeightUnit,
 } from "@/services/storage";
 import { formatDuration, formatRelativeDate } from "@/utils/formatters";
+import UnitToggleButtonGroup from "@/components/UnitToggleButtonGroup"; // Import toggle button
+import WeightUnitInput from "@/components/WeightUnitInput"; // Import weight input
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkoutDetails">;
 
 const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { colors } = useTheme(); // Get colors from theme context
+  const { colors } = useTheme();
   const { workoutId } = route.params;
 
   const [workout, setWorkout] = useState<CompletedWorkout | null>(null);
@@ -44,12 +46,14 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Fetch Data ---
   const loadWorkoutDetails = useCallback(() => {
+    // ... (implementation remains the same)
     setIsLoading(true);
     setError(null);
     try {
       const fetchedWorkout = getCompletedWorkoutById(workoutId);
       if (fetchedWorkout) {
         setWorkout(fetchedWorkout);
+        // Deep copy for editing, ensure restTakenSeconds is copied
         setEditableWorkout(JSON.parse(JSON.stringify(fetchedWorkout)));
         navigation.setOptions({ title: fetchedWorkout.name });
       } else {
@@ -72,17 +76,20 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Edit Mode Handlers ---
   const handleToggleEdit = () => {
+    // ... (implementation remains the same)
     if (isEditMode && workout) {
+      // Reset editable state if cancelling edit
       setEditableWorkout(JSON.parse(JSON.stringify(workout)));
     }
     setIsEditMode(!isEditMode);
   };
 
   const handleSaveChanges = () => {
+    // ... (implementation remains the same)
     if (editableWorkout) {
       try {
         updateCompletedWorkout(editableWorkout);
-        setWorkout(JSON.parse(JSON.stringify(editableWorkout)));
+        setWorkout(JSON.parse(JSON.stringify(editableWorkout))); // Update displayed data
         setIsEditMode(false);
         Alert.alert("Success", "Workout details updated.");
       } catch (err) {
@@ -94,6 +101,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Delete Handler ---
   const handleDelete = () => {
+    // ... (implementation remains the same)
     Alert.alert(
       "Delete Workout?",
       "Are you sure you want to delete this completed workout record? This cannot be undone.",
@@ -119,13 +127,14 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Input Change Handlers ---
   const handleNotesChange = (text: string) => {
+    // ... (implementation remains the same)
     setEditableWorkout(prev => (prev ? { ...prev, notes: text } : null));
   };
 
   const handleSetChange = (
     exerciseIndex: number,
     setIndex: number,
-    field: "reps" | "weight",
+    field: "reps" | "weight" | "restTakenSeconds", // Add restTakenSeconds
     value: string
   ) => {
     setEditableWorkout(prev => {
@@ -135,7 +144,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         const updatedSets = [...updatedExercises[exerciseIndex].sets];
         if (updatedSets[setIndex]) {
           const numericValue =
-            field === "reps" ? parseInt(value, 10) : parseFloat(value);
+            field === "weight" ? parseFloat(value) : parseInt(value, 10); // Keep reps/rest as int
           updatedSets[setIndex] = {
             ...updatedSets[setIndex],
             [field]: isNaN(numericValue) ? 0 : numericValue,
@@ -156,6 +165,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     setIndex: number,
     unit: WeightUnit
   ) => {
+    // ... (implementation remains the same)
     setEditableWorkout(prev => {
       if (!prev) return null;
       const updatedExercises = [...prev.exercises];
@@ -176,9 +186,9 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Dynamic Header ---
   useLayoutEffect(() => {
+    // ... (implementation remains the same)
     navigation.setOptions({
-      // Use theme colors for header icons
-      headerTintColor: colors.text, // Color for back arrow and title
+      headerTintColor: colors.text,
       headerRight: () => (
         <View style={styles.headerButtons}>
           {isEditMode ? (
@@ -225,14 +235,15 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     handleToggleEdit,
     handleSaveChanges,
     handleDelete,
-    colors, // Add colors as dependency
+    colors,
   ]);
 
-  // --- Styles using theme colors ---
+  // --- Styles ---
   const styles = StyleSheet.create({
+    // ... (keep existing styles: container, contentContainer, centered, headerButtons, headerButton, detailsCard, sectionTitle, detailRow, detailText, notesContainer, notesLabel, notesText, notesInput, exerciseCard, exerciseName) ...
     container: {
       flex: 1,
-      backgroundColor: colors.background, // Use theme background
+      backgroundColor: colors.background,
     },
     contentContainer: {
       paddingBottom: 30,
@@ -242,7 +253,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
       justifyContent: "center",
       alignItems: "center",
       padding: 20,
-      backgroundColor: colors.background, // Use theme background
+      backgroundColor: colors.background,
     },
     headerButtons: {
       flexDirection: "row",
@@ -255,12 +266,11 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
       marginHorizontal: 16,
       marginTop: 8,
       padding: 15,
-      // Card component already uses theme colors
     },
     sectionTitle: {
       fontSize: 20,
       fontWeight: "bold",
-      color: colors.text, // Use theme text
+      color: colors.text,
       marginBottom: 15,
     },
     detailRow: {
@@ -270,7 +280,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     },
     detailText: {
       fontSize: 16,
-      color: colors.textSecondary, // Use theme text secondary
+      color: colors.textSecondary,
       marginLeft: 10,
     },
     notesContainer: {
@@ -279,36 +289,35 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
     notesLabel: {
       fontSize: 16,
       fontWeight: "500",
-      color: colors.text, // Use theme text
+      color: colors.text,
       marginBottom: 5,
     },
     notesText: {
       fontSize: 15,
-      color: colors.textSecondary, // Use theme text secondary
+      color: colors.textSecondary,
       lineHeight: 22,
     },
     notesInput: {
       fontSize: 15,
-      color: colors.text, // Use theme text
+      color: colors.text,
       lineHeight: 22,
-      backgroundColor: colors.background, // Use theme background for contrast inside card
+      backgroundColor: colors.background,
       borderRadius: 6,
       padding: 10,
       minHeight: 60,
       textAlignVertical: "top",
       borderWidth: 1,
-      borderColor: colors.border, // Use theme border
+      borderColor: colors.border,
     },
     exerciseCard: {
       marginHorizontal: 16,
       marginTop: 10,
       padding: 15,
-      // Card component already uses theme colors
     },
     exerciseName: {
       fontSize: 18,
       fontWeight: "bold",
-      color: colors.text, // Use theme text
+      color: colors.text,
       marginBottom: 15,
     },
     setRowHeader: {
@@ -316,89 +325,53 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
       marginBottom: 8,
       paddingBottom: 5,
       borderBottomWidth: 1,
-      borderBottomColor: colors.border, // Use theme border
+      borderBottomColor: colors.border,
+      paddingHorizontal: 5, // Add padding to align with rows
     },
     setRow: {
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: 8,
+      paddingHorizontal: 5, // Add padding to align with header
     },
     setHeaderText: {
       fontSize: 13,
-      color: colors.textSecondary, // Use theme text secondary
+      color: colors.textSecondary,
       fontWeight: "bold",
       textAlign: "center",
     },
     setText: {
       fontSize: 15,
-      color: colors.textSecondary, // Use theme text secondary
+      color: colors.textSecondary,
       textAlign: "center",
     },
     setInput: {
       fontSize: 15,
-      color: colors.text, // Use theme text
+      color: colors.text,
       textAlign: "center",
-      backgroundColor: colors.background, // Use theme background for contrast
+      backgroundColor: colors.background,
       borderRadius: 4,
       paddingVertical: 6,
       paddingHorizontal: 8,
       borderWidth: 1,
-      borderColor: colors.border, // Use theme border
+      borderColor: colors.border,
+      minWidth: 40, // Ensure minimum width for small numbers
     },
-    // Column widths
-    setCol: { width: 40 },
-    repsCol: { flex: 1, marginHorizontal: 5 },
-    weightCol: { flex: 1.5, marginHorizontal: 5 },
-    unitCol: { width: 60 },
-
-    // Styles for weight input + unit toggle in edit mode
-    weightInputContainer: {
-      flex: 1.5,
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.background, // Use theme background for contrast
-      borderRadius: 4,
-      borderWidth: 1,
-      borderColor: colors.border, // Use theme border
-      paddingLeft: 8,
-      marginHorizontal: 5,
-    },
-    weightTextInput: {
-      flex: 1,
-      fontSize: 15,
-      color: colors.text, // Use theme text
-      textAlign: "center",
-      paddingVertical: 6,
-    },
-    unitToggleContainer: {
-      flexDirection: "row",
-      marginLeft: 5,
-      paddingRight: 5,
-    },
-    unitToggleButton: {
-      paddingVertical: 4,
-      paddingHorizontal: 6,
-      borderRadius: 4,
-      marginLeft: 3,
-      borderWidth: 1,
-      borderColor: "transparent",
-    },
-    unitToggleButtonSelected: {
-      backgroundColor: colors.primary, // Use theme primary
-      borderColor: colors.primary, // Use theme primary
-    },
-    unitToggleText: {
-      fontSize: 12,
-      fontWeight: "bold",
-      color: colors.textSecondary, // Use theme text secondary
-    },
-    unitToggleTextSelected: {
-      color: colors.buttonText, // Use theme button text
+    // Column widths - Adjust flex values
+    setCol: { width: 35 }, // Slightly narrower
+    repsCol: { flex: 0.8, marginHorizontal: 4 }, // Less flex
+    weightCol: { flex: 1.2, marginHorizontal: 4 }, // More flex for WeightUnitInput
+    restCol: { flex: 1, marginHorizontal: 4 }, // Flex for rest display/input
+    // WeightUnitInput container style for edit mode
+    weightInputStyle: {
+      flex: 1.2, // Match header flex
+      marginHorizontal: 4,
     },
   });
 
   // --- Render Logic ---
   if (isLoading) {
+    // ... (loading indicator remains the same)
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -407,6 +380,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   if (error || !workout) {
+    // ... (error display remains the same)
     return (
       <View style={styles.centered}>
         <Text style={{ color: colors.destructive }}>
@@ -417,7 +391,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   const displayData = isEditMode ? editableWorkout : workout;
-  if (!displayData) return null;
+  if (!displayData) return null; // Should not happen if loading/error handled
 
   return (
     <ScrollView
@@ -425,6 +399,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
       contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
     >
+      {/* Details Card (remains the same) */}
       <Card style={styles.detailsCard}>
         <Text style={styles.sectionTitle}>Workout Details</Text>
         <View style={styles.detailRow}>
@@ -466,14 +441,17 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
         Exercises
       </Text>
       {displayData.exercises.map((exercise, exIndex) => (
-        <Card key={exercise.id} style={styles.exerciseCard}>
+        <Card key={exercise.instanceId} style={styles.exerciseCard}>
           <Text style={styles.exerciseName}>{exercise.name}</Text>
+          {/* --- Updated Set Header --- */}
           <View style={styles.setRowHeader}>
             <Text style={[styles.setHeaderText, styles.setCol]}>Set</Text>
             <Text style={[styles.setHeaderText, styles.repsCol]}>Reps</Text>
             <Text style={[styles.setHeaderText, styles.weightCol]}>Weight</Text>
-            {isEditMode ? <View style={styles.unitCol} /> : null}
+            <Text style={[styles.setHeaderText, styles.restCol]}>Rest</Text>
           </View>
+          {/* --- End Updated Set Header --- */}
+
           {exercise.sets.map((set, setIndex) => (
             <View key={set.id} style={styles.setRow}>
               <Text style={[styles.setText, styles.setCol]}>
@@ -481,6 +459,7 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
               </Text>
               {isEditMode ? (
                 <>
+                  {/* Reps Input */}
                   <TextInput
                     style={[styles.setInput, styles.repsCol]}
                     value={set.reps.toString()}
@@ -490,63 +469,52 @@ const WorkoutDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
                     keyboardType="number-pad"
                     selectTextOnFocus
                   />
-                  <View style={styles.weightInputContainer}>
-                    <TextInput
-                      style={styles.weightTextInput}
-                      value={set.weight.toString()}
-                      onChangeText={val =>
-                        handleSetChange(exIndex, setIndex, "weight", val)
-                      }
-                      keyboardType="numeric"
-                      selectTextOnFocus
-                    />
-                    <View style={styles.unitToggleContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.unitToggleButton,
-                          set.unit === "kg" && styles.unitToggleButtonSelected,
-                        ]}
-                        onPress={() =>
-                          handleUnitChange(exIndex, setIndex, "kg")
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.unitToggleText,
-                            set.unit === "kg" && styles.unitToggleTextSelected,
-                          ]}
-                        >
-                          kg
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.unitToggleButton,
-                          set.unit === "lbs" && styles.unitToggleButtonSelected,
-                        ]}
-                        onPress={() =>
-                          handleUnitChange(exIndex, setIndex, "lbs")
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.unitToggleText,
-                            set.unit === "lbs" && styles.unitToggleTextSelected,
-                          ]}
-                        >
-                          lbs
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  {/* Weight Input */}
+                  <WeightUnitInput
+                    containerStyle={styles.weightInputStyle} // Apply flex style
+                    weightValue={set.weight.toString()}
+                    unitValue={set.unit}
+                    onWeightChange={val =>
+                      handleSetChange(exIndex, setIndex, "weight", val)
+                    }
+                    onUnitChange={unit =>
+                      handleUnitChange(exIndex, setIndex, unit)
+                    }
+                  />
+                  {/* Rest Input */}
+                  <TextInput
+                    style={[styles.setInput, styles.restCol]}
+                    value={(set.restTakenSeconds ?? "").toString()} // Handle undefined
+                    onChangeText={val =>
+                      handleSetChange(
+                        exIndex,
+                        setIndex,
+                        "restTakenSeconds",
+                        val
+                      )
+                    }
+                    placeholder="0"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                    selectTextOnFocus
+                  />
                 </>
               ) : (
                 <>
+                  {/* Reps Display */}
                   <Text style={[styles.setText, styles.repsCol]}>
                     {set.reps}
                   </Text>
+                  {/* Weight Display */}
                   <Text style={[styles.setText, styles.weightCol]}>
                     {`${set.weight} ${set.unit}`}
+                  </Text>
+                  {/* Rest Display */}
+                  <Text style={[styles.setText, styles.restCol]}>
+                    {set.restTakenSeconds !== undefined &&
+                    set.restTakenSeconds > 0
+                      ? formatDuration(set.restTakenSeconds)
+                      : "-"}
                   </Text>
                 </>
               )}

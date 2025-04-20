@@ -34,6 +34,7 @@ import {
   WorkoutDraft,
   WorkoutTemplateExercise,
   WeightUnit,
+  WorkoutExercise,
 } from "@/services/storage";
 import {
   armsExercises,
@@ -54,16 +55,9 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { lightColors } from "@/theme/colors"; // For style function type
 import WeightUnitInput from "@/components/WeightUnitInput";
 
-interface WorkoutExercise {
-  instanceId: string;
-  id: string;
-  name: string;
-  category: Categories;
-  type: string;
-  sets: WorkoutSet[];
-}
-
 type Props = NativeStackScreenProps<RootStackParamList, "CreateWorkout">;
+
+const DEFAULT_REST_DURATION = 60; // Default rest if not set in template
 
 const workoutTypeOptions = [
   "Strength",
@@ -275,6 +269,34 @@ const getStyles = (colors: ScreenColors) =>
       fontWeight: "bold",
       fontSize: 14,
     },
+    restInputContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 5, // Space above rest input
+      // Removed paddingHorizontal from header, apply here if needed
+    },
+    restInputLabel: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginRight: 8,
+    },
+    restTextInput: {
+      backgroundColor: colors.background, // Match set inputs
+      color: colors.text,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minWidth: 50, // Ensure decent width
+      textAlign: "center",
+    },
+    restInputUnit: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginLeft: 5,
+    },
   });
 
 const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
@@ -336,6 +358,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
                   weight: (set.weight || 0).toString(),
                   unit: (set as any).unit || defaultUnit, // Add unit from draft or default
                 })),
+                defaultRestSeconds: ex.defaultRestSeconds, // <-- Load rest time
               }));
               setAddedExercises(exercisesWithSetIdsAndUnits);
               setIsInitialLoad(false);
@@ -371,6 +394,7 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
             weight: set.weight,
             // unit is NOT saved in the draft/template structure
           })),
+          defaultRestSeconds: ex.defaultRestSeconds, // <-- Save rest time
         })),
         timestamp: Date.now(),
       };
@@ -414,7 +438,8 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         ex => ({
           ...ex,
           instanceId: uuid.v4() as string,
-          sets: createDefaultSets(), // This now includes the default unit
+          sets: createDefaultSets(),
+          defaultRestSeconds: DEFAULT_REST_DURATION, // <-- Set default rest
         })
       );
       setAddedExercises(prevExercises => [
@@ -544,6 +569,21 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
+  const handleRestChange = (instanceId: string, newRest: string) => {
+    const rest = parseInt(newRest, 10);
+    setAddedExercises(prevExercises =>
+      prevExercises.map(ex => {
+        if (ex.instanceId === instanceId) {
+          return {
+            ...ex,
+            defaultRestSeconds: isNaN(rest) ? undefined : rest,
+          };
+        }
+        return ex;
+      })
+    );
+  };
+
   // --- Save Workout Logic (Omitting unit from saved template) ---
   const handleSaveWorkout = useCallback(() => {
     if (!workoutName.trim()) {
@@ -569,8 +609,8 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
           id: set.id,
           reps: Number(set.reps) || 0,
           weight: parseFloat(set.weight) || 0,
-          // unit: set.unit, // <-- DO NOT SAVE UNIT TO TEMPLATE
         })),
+        defaultRestSeconds: ex.defaultRestSeconds, // <-- Save rest time
       })
     );
 
@@ -613,6 +653,19 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.exerciseDetail}>
                   {ex.type} • {ex.category}
                 </Text>
+              </View>
+              <View style={styles.restInputContainer}>
+                <Text style={styles.restInputLabel}>Default Rest:</Text>
+                <TextInput
+                  style={styles.restTextInput}
+                  value={(ex.defaultRestSeconds ?? "").toString()}
+                  onChangeText={text => handleRestChange(ex.instanceId, text)}
+                  placeholder={`${DEFAULT_REST_DURATION}`} // Show default as placeholder
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                  selectTextOnFocus
+                />
+                <Text style={styles.restInputUnit}>sec</Text>
               </View>
               <TouchableOpacity
                 style={styles.removeExerciseButton}
@@ -691,9 +744,11 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     },
     [
       styles,
+      colors,
       removeExercise,
       handleRepChange,
       handleWeightChange,
+      handleRestChange,
       handleUnitChange,
       handleRemoveSet,
       handleAddSet,

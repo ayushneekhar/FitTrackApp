@@ -30,6 +30,7 @@ import {
   WorkoutTemplate, // Import WorkoutTemplate type
   getWorkoutTemplateById, // Import fetch function
   deleteWorkoutTemplate, // Import delete function
+  WorkoutExercise,
 } from "@/services/storage";
 import {
   armsExercises,
@@ -43,17 +44,9 @@ import {
 import WorkoutTypePicker from "@/components/WorkoutTypePicker";
 import uuid from "react-native-uuid";
 
-// Define the structure for an exercise within this screen's state
-interface WorkoutExercise {
-  id: string; // Exercise ID from master list
-  name: string;
-  category: Categories;
-  type: string;
-  sets: WorkoutSet[];
-}
-
 // Define navigation props type, expecting templateId
 type Props = NativeStackScreenProps<RootStackParamList, "EditWorkout">;
+const DEFAULT_REST_DURATION = 60; // Default rest if not set in template
 
 const workoutTypeOptions = [
   "Strength",
@@ -74,7 +67,7 @@ const DUMMY_EXERCISES: Exercise[] = [
 ];
 
 const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { colors } = useTheme();
+  const { colors, preferences } = useTheme();
   const { templateId } = route.params; // Get the ID from navigation
 
   // State
@@ -113,7 +106,12 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
               Categories.Other, // Fallback category
             type:
               DUMMY_EXERCISES.find(dex => dex.id === ex.id)?.type || "Unknown", // Fallback type
-            sets: ex.sets.map(set => ({ ...set })), // Ensure sets are copied
+            sets: ex.sets.map(set => ({
+              ...set,
+              weight: (set.weight || 0).toString(), // Ensure weight is string for input
+              // Unit will be applied dynamically if needed, template doesn't store it
+            })), // Ensure sets are copied
+            defaultRestSeconds: ex.defaultRestSeconds, // <-- Load rest time
           }))
         );
         navigation.setOptions({ title: `Edit: ${template.name}` }); // Update header title
@@ -147,8 +145,10 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
             id: uuid.v4() as string,
             reps: defaultReps,
             weight: defaultWeight,
+            unit: preferences.defaultWeightUnit, // Use preference for new sets
           },
         ],
+        defaultRestSeconds: DEFAULT_REST_DURATION, // <-- Set default rest
       })
     );
     setAddedExercises(prevExercises => {
@@ -244,6 +244,19 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
 
+  const handleRestChange = (exerciseId: string, newRest: string) => {
+    const rest = parseInt(newRest, 10);
+    setAddedExercises(prevExercises =>
+      prevExercises.map(ex => {
+        if (ex.id === exerciseId) {
+          // Use exercise ID here as instanceId might not be stable/present
+          return { ...ex, defaultRestSeconds: isNaN(rest) ? undefined : rest };
+        }
+        return ex;
+      })
+    );
+  };
+
   // --- Save Changes Logic ---
   const handleSaveChanges = useCallback(() => {
     if (!workoutName.trim()) {
@@ -264,13 +277,14 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       type: workoutType,
       durationEstimate: duration ? parseInt(duration, 10) : undefined,
       exercises: addedExercises.map(ex => ({
-        id: ex.id,
+        instanceId: uuid.v4() as string, // Generate new instanceId on save? Or keep original? Let's generate.
         name: ex.name, // Save the potentially updated name? Or keep original? Let's save current name.
         sets: ex.sets.map(set => ({
-          id: set.id, // Keep existing set IDs
+          id: set.id,
           reps: Number(set.reps) || 0,
-          weight: Number(set.weight) || 0,
+          weight: parseFloat(set.weight) || 0, // Save weight as number
         })),
+        defaultRestSeconds: ex.defaultRestSeconds,
       })),
     };
 
@@ -546,6 +560,33 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       fontWeight: "bold",
       marginLeft: 8,
     },
+    restInputContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 5,
+    },
+    restInputLabel: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginRight: 8,
+    },
+    restTextInput: {
+      backgroundColor: colors.background,
+      color: colors.text,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minWidth: 50,
+      textAlign: "center",
+    },
+    restInputUnit: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginLeft: 5,
+    },
   });
 
   // --- Render Loading or Error ---
@@ -642,6 +683,19 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Text style={styles.exerciseDetail}>
                     {ex.type} • {ex.category}
                   </Text>
+                </View>
+                <View style={styles.restInputContainer}>
+                  <Text style={styles.restInputLabel}>Default Rest:</Text>
+                  <TextInput
+                    style={styles.restTextInput}
+                    value={(ex.defaultRestSeconds ?? "").toString()}
+                    onChangeText={text => handleRestChange(ex.id, text)}
+                    placeholder={`${DEFAULT_REST_DURATION}`}
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                    selectTextOnFocus
+                  />
+                  <Text style={styles.restInputUnit}>sec</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.removeExerciseButton}

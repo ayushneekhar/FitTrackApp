@@ -12,6 +12,16 @@ export interface WorkoutSet {
   unit: WeightUnit;
 }
 
+export interface WorkoutExercise {
+  instanceId: string;
+  id: string;
+  name: string;
+  category: Categories;
+  type: string;
+  sets: WorkoutSet[];
+  defaultRestSeconds?: number;
+}
+
 export interface UserGoals {
   weeklyWorkouts: number;
   weeklyActiveDays: number;
@@ -23,6 +33,7 @@ export interface WorkoutTemplateExercise {
   id: string;
   name: string;
   sets: Array<{ id: string; reps: number; weight: number }>;
+  defaultRestSeconds?: number;
 }
 
 export interface WorkoutTemplate {
@@ -43,6 +54,7 @@ export interface CompletedWorkoutExercise {
     weight: number;
     completed: boolean;
     unit: WeightUnit;
+    restTakenSeconds?: number;
   }>;
 }
 
@@ -155,6 +167,10 @@ export const saveWorkoutTemplate = (templateToSave: WorkoutTemplate): void => {
       ...set,
       id: set.id || (uuid.v4() as string),
     }));
+    ex.defaultRestSeconds =
+      typeof ex.defaultRestSeconds === "number" && !isNaN(ex.defaultRestSeconds)
+        ? ex.defaultRestSeconds
+        : undefined;
   });
 
   if (index === -1) {
@@ -371,7 +387,13 @@ export const saveUserGoals = (goals: UserGoals): void => {
 };
 
 export const saveWorkoutDraft = (draft: WorkoutDraft): void => {
-  draft.timestamp = Date.now(); // Update timestamp on save
+  draft.timestamp = Date.now();
+  draft.exercises.forEach(ex => {
+    ex.defaultRestSeconds =
+      typeof ex.defaultRestSeconds === "number" && !isNaN(ex.defaultRestSeconds)
+        ? ex.defaultRestSeconds
+        : undefined;
+  });
   if (draft.templateId === null) {
     // Save as 'Create New' draft
     saveObject(STORAGE_KEYS.WORKOUT_DRAFT_CREATE, draft);

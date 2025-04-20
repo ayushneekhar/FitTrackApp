@@ -28,6 +28,7 @@ import {
   clearActiveWorkoutSession,
   WorkoutSet as StoredWorkoutSet,
   WeightUnit,
+  CompletedWorkoutExercise,
 } from "@/services/storage";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import uuid from "react-native-uuid";
@@ -39,8 +40,8 @@ import Animated, {
   FadeInUp,
   FadeOutDown,
   FadeOutUp,
-  SlideInDown,
-  SlideOutUp,
+  Layout,
+  SequencedTransition,
 } from "react-native-reanimated";
 import AnimatedTimer from "@/components/AnimatedTimer";
 import WeightUnitInput from "@/components/WeightUnitInput";
@@ -50,16 +51,21 @@ type Props = NativeStackScreenProps<RootStackParamList, "ActiveWorkout">;
 // Extend StoredWorkoutSet for active state
 interface ActiveWorkoutSet extends StoredWorkoutSet {
   completed: boolean;
+  restTakenSeconds?: number; // Store actual rest taken after this set
 }
 
 interface ActiveWorkoutExercise {
-  id: string;
+  id: string; // Exercise definition ID
+  instanceId: string; // Unique ID for this instance in the workout
   name: string;
   sets: ActiveWorkoutSet[];
 }
 
-// --- NEW: Define Exercise Status Type ---
 type ExerciseStatus = "not-started" | "in-progress" | "completed";
+
+// --- Constants ---
+const DEFAULT_REST_DURATION = 60;
+const REST_ADJUST_INCREMENT = 15;
 
 const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   const { colors, preferences } = useTheme();
@@ -67,15 +73,30 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   const defaultUnit = preferences.defaultWeightUnit;
 
   // --- State ---
+  // Workout Timer State
   const [startTime, setStartTime] = useState<number>(0);
   const [accumulatedSeconds, setAccumulatedSeconds] = useState<number>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastResumeTime, setLastResumeTime] = useState<number>(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  // Workout Structure State
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [workoutExercises, setWorkoutExercises] = useState<
     ActiveWorkoutExercise[]
   >([]);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  // Rest Timer State
+  const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
+  const [restTimerSeconds, setRestTimerSeconds] = useState(0); // Countdown value
+  const [restTimerDuration, setRestTimerDuration] = useState(0); // Target duration for current rest
+  const [nextRestDuration, setNextRestDuration] = useState(
+    DEFAULT_REST_DURATION
+  ); // Configurable duration for the *next* rest
+  const [currentSetIndexForRest, setCurrentSetIndexForRest] = useState<
+    number | null
+  >(null); // Which set index triggered the current rest UI
+  const [overtickSeconds, setOvertickSeconds] = useState(0); // <-- ADDED: Tracks seconds past target
 
   // --- Refs ---
   const startTimeRef = useRef(startTime);
@@ -83,29 +104,53 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   const isFinishedRef = useRef(false);
   const elapsedSecondsRef = useRef(0);
   const workoutExercisesRef = useRef(workoutExercises);
+  const restTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const actualRestTrackerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const actualRestTakenRef = useRef(0); // Tracks actual seconds passed during rest
 
   // Update refs
   useEffect(() => {
     startTimeRef.current = startTime;
     accumulatedSecondsRef.current = accumulatedSeconds;
     workoutExercisesRef.current = workoutExercises;
-  }, [startTime, accumulatedSeconds, workoutExercises]);
+    elapsedSecondsRef.current = elapsedSeconds; // Keep elapsedSecondsRef updated
+  }, [startTime, accumulatedSeconds, workoutExercises, elapsedSeconds]);
 
-  // --- Initialization (remains the same) ---
+  // --- Initialization ---
   useEffect(() => {
     let initialExercises: ActiveWorkoutExercise[] = [];
     let startAccumulated = 0;
     let startTimestamp = 0;
     let startResumeTime = 0;
+    let initialNextRest = DEFAULT_REST_DURATION;
 
-    const createSetsWithUnit = (
+    const createSetsWithDefaults = (
       sets: Array<{ id: string; reps: number; weight: number }>
     ): ActiveWorkoutSet[] => {
       return sets.map(set => ({
         ...set,
         unit: defaultUnit,
         completed: false,
+        restTakenSeconds: undefined, // Initialize rest time
       }));
+    };
+
+    const mapTemplateExercises = (
+      templateExercises: WorkoutTemplateExercise[]
+    ): ActiveWorkoutExercise[] => {
+      return templateExercises.map((ex, index) => {
+        // Set initial nextRestDuration based on the *first* exercise's default
+        if (index === 0) {
+          initialNextRest = ex.defaultRestSeconds ?? DEFAULT_REST_DURATION;
+        }
+        return {
+          id: ex.id,
+          instanceId: ex.instanceId || (uuid.v4() as string),
+          name: ex.name,
+          sets: createSetsWithDefaults(ex.sets),
+          defaultRestSeconds: ex.defaultRestSeconds, // <-- Store default rest
+        };
+      });
     };
 
     if (resumeData) {
@@ -113,12 +158,9 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       startAccumulated = resumeData.accumulatedSeconds;
       startTimestamp = resumeData.startTime;
       startResumeTime = Date.now();
-      initialExercises =
-        resumeData.template?.exercises.map(ex => ({
-          id: ex.id,
-          name: ex.name,
-          sets: createSetsWithUnit(ex.sets),
-        })) || [];
+      initialExercises = mapTemplateExercises(
+        resumeData.template?.exercises || []
+      );
       isFinishedRef.current = false;
       clearActiveWorkoutSession();
     } else if (initialTemplate) {
@@ -127,11 +169,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       startTimestamp = now;
       startResumeTime = now;
       startAccumulated = 0;
-      initialExercises = initialTemplate.exercises.map(ex => ({
-        id: ex.id,
-        name: ex.name,
-        sets: createSetsWithUnit(ex.sets),
-      }));
+      initialExercises = mapTemplateExercises(initialTemplate.exercises);
       isFinishedRef.current = false;
     } else {
       console.log("Starting empty workout.");
@@ -148,13 +186,43 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     setLastResumeTime(startResumeTime);
     setWorkoutExercises(initialExercises);
     setCurrentExerciseIndex(0);
-    setIsTimerRunning(true);
+    setIsTimerRunning(true); // Start main timer immediately
+    setIsRestTimerRunning(false); // Ensure rest timer is initially off
+    setCurrentSetIndexForRest(null);
+    setNextRestDuration(initialNextRest);
+    setOvertickSeconds(0);
   }, [resumeData, initialTemplate, defaultUnit]);
 
   const currentExercise = workoutExercises[currentExerciseIndex];
   const workoutName = initialTemplate?.name || "New Workout";
 
-  // --- Timer Logic & Controls (remain the same) ---
+  useEffect(() => {
+    if (isRestTimerRunning) {
+      restTimerIntervalRef.current = setInterval(() => {
+        setRestTimerSeconds(prev => {
+          if (prev > 0) {
+            return prev - 1; // Countdown
+          } else {
+            // Start over ticking
+            setOvertickSeconds(o => o + 1);
+            return 0; // Keep timer seconds at 0 while over ticking
+          }
+        });
+      }, 1000);
+    } else {
+      if (restTimerIntervalRef.current) {
+        clearInterval(restTimerIntervalRef.current);
+        restTimerIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (restTimerIntervalRef.current)
+        clearInterval(restTimerIntervalRef.current);
+    };
+  }, [isRestTimerRunning]);
+
+  // --- Timer Logic & Controls ---
+  // Main Workout Timer
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isTimerRunning && lastResumeTime > 0) {
@@ -164,27 +232,62 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         );
         const currentTotalElapsed = accumulatedSeconds + secondsSinceLastResume;
         setElapsedSeconds(currentTotalElapsed);
-        elapsedSecondsRef.current = currentTotalElapsed;
+        // elapsedSecondsRef is updated in its own useEffect
       };
-      updateTimer();
+      updateTimer(); // Update immediately
       interval = setInterval(updateTimer, 1000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [isTimerRunning, lastResumeTime, accumulatedSeconds]);
+  // Only depends on isRestTimerRunning
+
+  // Actual Rest Time Tracker
+  useEffect(() => {
+    if (isRestTimerRunning) {
+      actualRestTakenRef.current = 0; // Reset tracker
+      actualRestTrackerIntervalRef.current = setInterval(() => {
+        actualRestTakenRef.current += 1;
+      }, 1000);
+    } else {
+      if (actualRestTrackerIntervalRef.current) {
+        clearInterval(actualRestTrackerIntervalRef.current);
+        actualRestTrackerIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (actualRestTrackerIntervalRef.current)
+        clearInterval(actualRestTrackerIntervalRef.current);
+    };
+  }, [isRestTimerRunning]);
+
+  // --- Timer Control Handlers ---
+  const pauseMainTimer = () => {
+    if (isTimerRunning) {
+      setAccumulatedSeconds(elapsedSecondsRef.current); // Save current progress
+      setLastResumeTime(0); // Stop tracking new time
+      setIsTimerRunning(false);
+    }
+  };
+
+  const resumeMainTimer = () => {
+    if (!isTimerRunning) {
+      setLastResumeTime(Date.now()); // Start tracking new time from now
+      setIsTimerRunning(true);
+    }
+  };
 
   const handleToggleTimer = () => {
     if (isTimerRunning) {
-      setAccumulatedSeconds(elapsedSecondsRef.current);
-      setLastResumeTime(0);
+      pauseMainTimer();
     } else {
-      setLastResumeTime(Date.now());
+      resumeMainTimer();
     }
-    setIsTimerRunning(!isTimerRunning);
   };
 
   const handleResetTimer = () => {
+    // ... (reset logic remains the same)
     Alert.alert("Reset Timer?", "Are you sure you want to reset the timer?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -193,19 +296,70 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         onPress: () => {
           setAccumulatedSeconds(0);
           setElapsedSeconds(0);
-          elapsedSecondsRef.current = 0;
+          // elapsedSecondsRef.current = 0; // Ref updated via useEffect
           setLastResumeTime(isTimerRunning ? Date.now() : 0);
         },
       },
     ]);
   };
 
+  // --- Rest Timer Control Handlers ---
+  const clearRestTimerState = () => {
+    setIsRestTimerRunning(false);
+    setCurrentSetIndexForRest(null);
+    setRestTimerSeconds(0);
+    setOvertickSeconds(0); // <-- Reset overtick
+  };
+
+  const recordRestTime = (setIndex: number) => {
+    const restTaken = actualRestTakenRef.current;
+    console.log(
+      `Recording ${restTaken}s rest after exercise ${currentExerciseIndex}, set ${setIndex}`
+    );
+    setWorkoutExercises(prevExercises =>
+      prevExercises.map((ex, exIndex) => {
+        if (exIndex === currentExerciseIndex) {
+          const updatedSets = ex.sets.map((set, sIndex) => {
+            if (sIndex === setIndex) {
+              return { ...set, restTakenSeconds: restTaken };
+            }
+            return set;
+          });
+          return { ...ex, sets: updatedSets };
+        }
+        return ex;
+      })
+    );
+  };
+
+  const handleStartRest = (setIndex: number) => {
+    if (currentSetIndexForRest === setIndex) {
+      setRestTimerDuration(nextRestDuration);
+      setRestTimerSeconds(nextRestDuration);
+      setOvertickSeconds(0); // <-- Reset overtick on start
+      setIsRestTimerRunning(true);
+    }
+  };
+
+  const handleStartNextSet = () => {
+    if (isRestTimerRunning && currentSetIndexForRest !== null) {
+      recordRestTime(currentSetIndexForRest);
+    }
+    clearRestTimerState();
+    resumeMainTimer();
+  };
+
+  const handleAdjustRestDuration = (increment: number) => {
+    setNextRestDuration(prev => Math.max(0, prev + increment));
+  };
+
   // --- Save Session Function (remains the same) ---
   const saveCurrentSession = useCallback(() => {
+    // ... (implementation remains the same)
     if (!isFinishedRef.current && startTimeRef.current > 0) {
       const sessionToSave: ActiveWorkoutSession = {
         startTime: startTimeRef.current,
-        accumulatedSeconds: elapsedSecondsRef.current,
+        accumulatedSeconds: elapsedSecondsRef.current, // Use ref for latest value
         template: initialTemplate || null,
       };
       console.log("Saving session state...", sessionToSave);
@@ -217,6 +371,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Prevent Back Navigation Hook (remains the same) ---
   usePreventRemove(startTime > 0 && !isFinishedRef.current, ({ data }) => {
+    // ... (implementation remains the same)
     Alert.alert(
       "Pause Workout?",
       "Do you want to pause this workout and leave? Your progress will be saved.",
@@ -226,8 +381,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           text: "Pause & Leave",
           style: "destructive",
           onPress: () => {
-            setIsTimerRunning(false);
-            setAccumulatedSeconds(elapsedSecondsRef.current);
+            pauseMainTimer(); // Use pause function
             saveCurrentSession();
             navigation.dispatch(data.action);
           },
@@ -238,6 +392,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Set Data Handling (Reps, Weight, Unit - remain the same) ---
   const handleRepsChange = (setIndex: number, value: string) => {
+    // ... (implementation remains the same)
     const reps = parseInt(value, 10);
     setWorkoutExercises(prevExercises =>
       prevExercises.map((ex, exIndex) => {
@@ -256,6 +411,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleWeightChange = (setIndex: number, value: string) => {
+    // ... (implementation remains the same)
     const weight = parseFloat(value);
     setWorkoutExercises(prevExercises =>
       prevExercises.map((ex, exIndex) => {
@@ -274,6 +430,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   const handleUnitChange = (setIndex: number, newUnit: WeightUnit) => {
+    // ... (implementation remains the same)
     setWorkoutExercises(prevExercises =>
       prevExercises.map((ex, exIndex) => {
         if (exIndex === currentExerciseIndex) {
@@ -292,21 +449,21 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Toggle Set Complete & Auto-Advance ---
   const handleToggleSetComplete = (setIndex: number) => {
+    // ... (logic to update set completion and check exercise completion remains the same) ...
     let exerciseJustCompleted = false;
-    let updatedExercises: ActiveWorkoutExercise[] = [];
+    let isCompletingSet = false;
 
     setWorkoutExercises(prevExercises => {
-      updatedExercises = prevExercises.map((ex, exIndex) => {
+      const updatedExercises = prevExercises.map((ex, exIndex) => {
         if (exIndex === currentExerciseIndex) {
-          // Update the specific set's completed status
           const updatedSets = ex.sets.map((set, sIndex) => {
             if (sIndex === setIndex) {
+              isCompletingSet = !set.completed;
               return { ...set, completed: !set.completed };
             }
             return set;
           });
 
-          // Check if *this* exercise is now fully completed
           const allSetsCompleted = updatedSets.every(set => set.completed);
           if (allSetsCompleted) {
             exerciseJustCompleted = true;
@@ -316,16 +473,29 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         }
         return ex;
       });
-      return updatedExercises; // Return the new state
+      return updatedExercises;
     });
 
-    // --- Auto-Advance Logic ---
-    // Needs to run *after* state update is processed.
-    // Using a microtask (Promise.resolve) ensures it runs after the current render cycle.
+    // Handle Timers
+    if (isCompletingSet) {
+      pauseMainTimer();
+      clearRestTimerState();
+      setCurrentSetIndexForRest(setIndex);
+      // Use current exercise's default rest if available
+      const currentExDefaultRest =
+        workoutExercisesRef.current[currentExerciseIndex]?.defaultRestSeconds;
+      setNextRestDuration(currentExDefaultRest ?? DEFAULT_REST_DURATION);
+    } else {
+      clearRestTimerState();
+      resumeMainTimer();
+    }
+
+    // Auto-Advance (remains the same)
     Promise.resolve().then(() => {
+      // ...
       if (
         exerciseJustCompleted &&
-        currentExerciseIndex < workoutExercisesRef.current.length - 1 // Use ref for latest length
+        currentExerciseIndex < workoutExercisesRef.current.length - 1
       ) {
         console.log(
           `Exercise ${currentExerciseIndex + 1} completed, advancing.`
@@ -335,43 +505,69 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     });
   };
 
+  const updateNextRestForExercise = (index: number) => {
+    const exercise = workoutExercisesRef.current[index];
+    const defaultRest = exercise?.defaultRestSeconds ?? DEFAULT_REST_DURATION;
+    setNextRestDuration(defaultRest);
+  };
+
   // --- Exercise Navigation ---
   const handleNextExercise = () => {
     if (currentExerciseIndex < workoutExercises.length - 1) {
-      setCurrentExerciseIndex(prev => prev + 1);
+      const nextIndex = currentExerciseIndex + 1;
+      clearRestTimerState();
+      resumeMainTimer();
+      setCurrentExerciseIndex(nextIndex);
+      updateNextRestForExercise(nextIndex); // <-- Update rest duration
     } else {
-      // Optionally show "Last Exercise" message or offer to finish
       Alert.alert("Last Exercise", "You've reached the last exercise.");
     }
   };
 
   const handlePreviousExercise = () => {
     if (currentExerciseIndex > 0) {
-      setCurrentExerciseIndex(prev => prev - 1); // Corrected to prev - 1
+      const prevIndex = currentExerciseIndex - 1;
+      clearRestTimerState();
+      resumeMainTimer();
+      setCurrentExerciseIndex(prevIndex);
+      updateNextRestForExercise(prevIndex); // <-- Update rest duration
     }
   };
 
   const handleSelectExercise = (index: number) => {
-    setCurrentExerciseIndex(index);
+    if (index !== currentExerciseIndex) {
+      clearRestTimerState();
+      resumeMainTimer();
+      setCurrentExerciseIndex(index);
+      updateNextRestForExercise(index); // <-- Update rest duration
+    }
   };
 
-  // --- Finish Workout Logic (remains the same) ---
+  // --- Finish Workout Logic ---
   const handleFinishWorkout = useCallback(() => {
     if (!startTime) return;
     isFinishedRef.current = true;
-    const endTime = Date.now();
-    const finalDurationSeconds = elapsedSecondsRef.current;
+    pauseMainTimer(); // Ensure main timer is paused
+    clearRestTimerState(); // Ensure rest timer is stopped
 
-    const finalExercises = workoutExercisesRef.current.map(ex => ({
-      id: ex.id,
-      name: ex.name,
-      sets: ex.sets.map(set => ({
-        reps: Number(set.reps) || 0,
-        weight: Number(set.weight) || 0,
-        completed: set.completed,
-        unit: set.unit,
-      })),
-    }));
+    const endTime = Date.now();
+    const finalDurationSeconds = elapsedSecondsRef.current; // Use ref for final value
+
+    // Map state to CompletedWorkout structure, including restTakenSeconds
+    const finalExercises: CompletedWorkoutExercise[] =
+      workoutExercisesRef.current.map(ex => ({
+        instanceId: ex.instanceId,
+        id: ex.id,
+        name: ex.name,
+        sets: ex.sets.map(set => ({
+          id: set.id,
+          reps: Number(set.reps) || 0,
+          weight: Number(set.weight) || 0,
+          completed: set.completed,
+          unit: set.unit,
+          restTakenSeconds: set.restTakenSeconds, // Include saved rest time
+        })),
+      }));
 
     const completedWorkoutData: CompletedWorkout = {
       id: uuid.v4() as string,
@@ -381,6 +577,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       endTime: endTime,
       durationSeconds: finalDurationSeconds,
       exercises: finalExercises,
+      // notes: can be added later if needed
     };
 
     try {
@@ -390,23 +587,25 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       Alert.alert(
         "Workout Complete!",
         `Duration: ${formatDuration(finalDurationSeconds)}`,
-        [{ text: "OK", onPress: () => navigation.popToTop() }]
+        [{ text: "OK", onPress: () => navigation.popToTop() }] // Go back to main stack
       );
     } catch (error) {
       console.error("Failed to save workout:", error);
       Alert.alert("Error", "Could not save workout session.");
-      isFinishedRef.current = false;
+      isFinishedRef.current = false; // Allow trying again if save failed
+      resumeMainTimer(); // Resume timer if save failed? Or leave paused? Let's leave paused.
     }
-  }, [startTime, initialTemplate, workoutName, navigation]);
+  }, [startTime, initialTemplate, workoutName, navigation]); // Dependencies
 
   // --- Header (remains the same) ---
   useLayoutEffect(() => {
+    // ... (implementation remains the same)
     navigation.setOptions({
       title: workoutName,
       headerTitleAlign: "left",
       headerLeft: () => (
         <TouchableOpacity
-          onPressIn={() => navigation.goBack()}
+          onPressIn={() => navigation.goBack()} // Default goBack handles the usePreventRemove hook
           style={{ padding: 5, marginLeft: 10 }}
         >
           <Icon name="arrow-left" size={24} color={colors.text} />
@@ -426,16 +625,17 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.finishButtonText}>Finish Workout</Text>
         </TouchableOpacity>
       ),
-      gestureEnabled: false,
+      gestureEnabled: false, // Keep gesture disabled
     });
   }, [navigation, handleFinishWorkout, workoutName, colors]);
 
-  // --- NEW: Helper to Get Exercise Status ---
+  // --- Helper to Get Exercise Status (remains the same) ---
   const getExerciseStatus = (
     exercise: ActiveWorkoutExercise
   ): ExerciseStatus => {
+    // ... (implementation remains the same)
     if (!exercise || !exercise.sets || exercise.sets.length === 0) {
-      return "not-started"; // Or handle as an error/edge case
+      return "not-started";
     }
     const totalSets = exercise.sets.length;
     const completedSets = exercise.sets.filter(set => set.completed).length;
@@ -451,7 +651,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // --- Styles ---
   const styles = StyleSheet.create({
-    // ... (keep existing styles for container, timer, nav, inputs etc.) ...
+    // ... (keep existing styles) ...
     container: {
       flex: 1,
       backgroundColor: colors.background,
@@ -471,8 +671,13 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       color: colors.textSecondary,
       marginBottom: 4,
     },
+    timerDisplayContainer: {
+      flexDirection: "row", // Keep timer digits together
+      minHeight: 55, // Prevent layout shift when timer appears/disappears
+    },
     timerControls: {
       flexDirection: "row",
+      marginTop: 10, // Add margin top
     },
     timerButton: {
       flexDirection: "row",
@@ -530,8 +735,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     // Current Exercise Section
     currentExerciseSection: {
       paddingHorizontal: 16,
-      paddingTop: 16, // Add top padding
-      paddingBottom: 6, // Reduce bottom padding slightly
+      paddingTop: 16,
+      paddingBottom: 6,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
@@ -558,10 +763,13 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     weightCol: { flex: 1.5, marginHorizontal: 5 }, // Make weight col wider
     doneCol: { width: 50 },
     // Set Row
+    setRowContainer: {
+      // Wrap set row and rest timer UI
+      marginBottom: 10,
+    },
     setRow: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 10,
       paddingVertical: 5,
     },
     setNumberText: {
@@ -570,9 +778,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       color: colors.textSecondary,
       textAlign: "center",
     },
-    // Input container for Reps
     repsInputContainer: {
-      flex: 1, // Takes space defined by repsCol
+      flex: 1,
       backgroundColor: colors.background,
       borderRadius: 6,
       borderWidth: 1,
@@ -581,10 +788,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       marginHorizontal: 5,
       minHeight: 40,
       justifyContent: "center",
-      position: "relative", // Needed for absolute positioning of +/- buttons
+      position: "relative",
     },
-    // Input container for Weight (includes unit buttons)
-
     setInput: {
       fontSize: 14,
       color: colors.text,
@@ -607,28 +812,109 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       backgroundColor: colors.primary,
     },
     setRowCompleted: {
-      opacity: 0.6,
+      opacity: 0.6, // Dim completed row slightly
     },
-    // Reps +/- buttons
     decreaseReps: {
       position: "absolute",
-      right: 5, // Position inside right edge
-      top: -5, // Adjust vertical position
+      right: 5,
+      top: -5,
       zIndex: 2,
       padding: 5,
     },
     increaseReps: {
       position: "absolute",
-      right: 5, // Position inside right edge
-      bottom: -5, // Adjust vertical position
+      right: 5,
+      bottom: -5,
       zIndex: 2,
       padding: 5,
     },
+    // --- Rest Timer UI Styles ---
+    restTimerContainer: {
+      marginTop: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 5, // Match set row padding
+      backgroundColor: colors.progressBarBackground, // Distinct background
+      borderRadius: 6,
+      alignItems: "center",
+    },
+    restTimerActiveContainer: {
+      paddingBottom: 15,
+    },
+    restTimerText: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: colors.primary,
+      marginBottom: 10,
+      fontVariant: ["tabular-nums"],
+    },
+    restTimerTextContainer: {
+      // Container for main timer and overtick
+      flexDirection: "row",
+      alignItems: "baseline", // Align baseline of numbers
+      marginBottom: 10,
+    },
+    restControlsContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "100%",
+    },
+    restAdjustButton: {
+      padding: 8,
+      marginHorizontal: 15,
+      borderRadius: 20,
+      backgroundColor: colors.card,
+    },
+    restActionButton: {
+      paddingVertical: 10,
+      paddingHorizontal: 25,
+      borderRadius: 6,
+      marginHorizontal: 5,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    startRestButton: {
+      backgroundColor: colors.primary,
+    },
+    startNextSetButton: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    restActionButtonText: {
+      fontSize: 14,
+      fontWeight: "bold",
+      marginLeft: 5,
+    },
+    startRestButtonText: {
+      color: colors.buttonText,
+    },
+    startNextSetButtonText: {
+      color: colors.text,
+    },
+    nextRestDurationText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      fontWeight: "500",
+      minWidth: 60, // Ensure space for text
+      textAlign: "center",
+    },
+    restTimerTextOvertick: {
+      color: colors.destructive, // Red when over ticking
+    },
+    restTimerOvertickValue: {
+      fontSize: 14, // Smaller font for overtick value
+      fontWeight: "bold",
+      color: colors.destructive,
+      marginLeft: 5, // Space from main timer
+      fontVariant: ["tabular-nums"],
+    },
+    // --- End Rest Timer UI Styles ---
     // All Exercises Section
     allExercisesSection: {
       paddingTop: 16,
-      rowGap: 8, // Use gap for spacing between items
-      paddingBottom: 20, // Add padding at the bottom
+      rowGap: 8,
+      paddingBottom: 20,
     },
     allExercisesTitle: {
       fontSize: 18,
@@ -641,50 +927,44 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingVertical: 12, // Adjust padding
+      paddingVertical: 12,
       paddingHorizontal: 16,
       marginHorizontal: 16,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 8,
-      backgroundColor: colors.card, // Default background
+      backgroundColor: colors.card,
     },
     exerciseListItemActive: {
-      borderColor: colors.primary, // Highlight border for active
-      backgroundColor: colors.progressBarBackground, // Slightly different bg for active
+      borderColor: colors.primary,
+      backgroundColor: colors.progressBarBackground,
     },
-    // --- NEW: Styles for Exercise Status ---
     exerciseListItemContent: {
       flexDirection: "row",
       alignItems: "center",
-      flex: 1, // Take available space
+      flex: 1,
     },
     statusIcon: {
-      marginRight: 12, // Space between icon and text
-      width: 20, // Fixed width for alignment
+      marginRight: 12,
+      width: 20,
       textAlign: "center",
     },
     exerciseListItemTextContainer: {
-      flex: 1, // Allow text to wrap
+      flex: 1,
     },
     exerciseListName: {
       fontSize: 16,
       color: colors.text,
-      fontWeight: "500", // Make name slightly bolder
+      fontWeight: "500",
     },
     exerciseListSets: {
       fontSize: 14,
       color: colors.textSecondary,
-      marginTop: 2, // Add space below name
+      marginTop: 2,
     },
-    // Specific styles based on status
-    exerciseListItemInProgress: {
-      // Optional: slightly different background or border
-      // backgroundColor: colors.background,
-    },
+    exerciseListItemInProgress: {},
     exerciseListItemCompleted: {
-      opacity: 0.6, // Dim completed exercises
-      // backgroundColor: colors.background, // Optional different background
+      opacity: 0.6,
     },
     // Finish Button (Header)
     finishButton: {
@@ -717,9 +997,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     >
       {/* Workout Timer */}
       <View style={styles.timerSection}>
-        {/* ... timer display and buttons ... */}
-        <Text style={styles.timerLabel}>Workout Timer</Text>
-        <View style={{ flexDirection: "row" }}>
+        <Text style={styles.timerLabel}>Workout Time</Text>
+        <View style={styles.timerDisplayContainer}>
           <AnimatedTimer elapsedSeconds={elapsedSeconds} />
         </View>
         <View style={styles.timerControls}>
@@ -731,18 +1010,27 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
                 : styles.timerButtonPrimary,
             ]}
             onPress={handleToggleTimer}
+            disabled={isRestTimerRunning} // Disable main timer controls during rest
           >
             <Icon
               name={isTimerRunning ? "pause" : "play"}
               size={18}
-              color={isTimerRunning ? colors.text : colors.buttonText}
+              color={
+                isRestTimerRunning
+                  ? colors.border
+                  : isTimerRunning
+                    ? colors.text
+                    : colors.buttonText
+              }
             />
             <Text
               style={[
                 styles.timerButtonText,
-                isTimerRunning
-                  ? styles.timerButtonTextSecondary
-                  : styles.timerButtonTextPrimary,
+                isRestTimerRunning
+                  ? { color: colors.border }
+                  : isTimerRunning
+                    ? styles.timerButtonTextSecondary
+                    : styles.timerButtonTextPrimary,
               ]}
             >
               {isTimerRunning ? "Pause" : "Start"}
@@ -751,10 +1039,19 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[styles.timerButton, styles.timerButtonSecondary]}
             onPress={handleResetTimer}
+            disabled={isRestTimerRunning} // Disable main timer controls during rest
           >
-            <Icon name="backup-restore" size={18} color={colors.text} />
+            <Icon
+              name="backup-restore"
+              size={18}
+              color={isRestTimerRunning ? colors.border : colors.text}
+            />
             <Text
-              style={[styles.timerButtonText, styles.timerButtonTextSecondary]}
+              style={[
+                styles.timerButtonText,
+                styles.timerButtonTextSecondary,
+                isRestTimerRunning ? { color: colors.border } : {},
+              ]}
             >
               Reset
             </Text>
@@ -764,25 +1061,28 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
       {/* Prev/Next Navigation */}
       <View style={styles.navSection}>
-        {/* ... nav buttons ... */}
         <TouchableOpacity
           style={[
             styles.navButton,
             currentExerciseIndex === 0 && styles.navButtonDisabled,
           ]}
           onPress={handlePreviousExercise}
-          disabled={currentExerciseIndex === 0}
+          disabled={currentExerciseIndex === 0 || isRestTimerRunning}
         >
           <Text style={styles.navButtonText}>Previous</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.navButton,
-            currentExerciseIndex >= workoutExercises.length - 1 &&
+            (currentExerciseIndex >= workoutExercises.length - 1 ||
+              isRestTimerRunning) &&
               styles.navButtonDisabled,
           ]}
           onPress={handleNextExercise}
-          disabled={currentExerciseIndex >= workoutExercises.length - 1}
+          disabled={
+            currentExerciseIndex >= workoutExercises.length - 1 ||
+            isRestTimerRunning
+          }
         >
           <Text style={styles.navButtonText}>Next</Text>
         </TouchableOpacity>
@@ -790,7 +1090,10 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
       {/* Current Exercise Details */}
       {currentExercise ? (
-        <View style={styles.currentExerciseSection}>
+        <Animated.View
+          layout={SequencedTransition.duration(200)} // Animate layout changes
+          style={styles.currentExerciseSection}
+        >
           <Text style={styles.currentExerciseTitle}>
             {currentExercise.name}
           </Text>
@@ -803,86 +1106,217 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
           {/* Sets List */}
           {currentExercise.sets.map((set, index) => (
-            <View
+            <Animated.View
               key={set.id}
-              style={[styles.setRow, set.completed && styles.setRowCompleted]}
+              layout={Layout.springify()} // Animate individual set rows
+              style={styles.setRowContainer}
             >
-              <Text style={styles.setNumberText}>{index + 1}</Text>
+              <View
+                style={[styles.setRow, set.completed && styles.setRowCompleted]}
+              >
+                <Text style={styles.setNumberText}>{index + 1}</Text>
 
-              {/* Reps Input */}
-              <View style={styles.repsInputContainer}>
-                <TextInput
-                  style={styles.setInput}
-                  value={set.reps.toString()}
-                  onChangeText={value => handleRepsChange(index, value)}
-                  keyboardType="number-pad"
-                  selectTextOnFocus
-                  editable={!set.completed}
-                />
-                {/* +/- Buttons for Reps */}
-                <TouchableOpacity
-                  onPress={() =>
-                    !set.completed &&
-                    handleRepsChange(index, (set.reps + 1).toString())
-                  }
-                  style={styles.decreaseReps}
-                  disabled={set.completed}
-                >
-                  <Icon
-                    name="chevron-up"
-                    size={20}
-                    color={set.completed ? colors.border : colors.textSecondary}
+                {/* Reps Input */}
+                <View style={styles.repsInputContainer}>
+                  <TextInput
+                    style={styles.setInput}
+                    value={set.reps.toString()}
+                    onChangeText={value => handleRepsChange(index, value)}
+                    keyboardType="number-pad"
+                    selectTextOnFocus
+                    editable={!set.completed && !isRestTimerRunning}
                   />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() =>
+                      !set.completed &&
+                      !isRestTimerRunning &&
+                      handleRepsChange(index, (set.reps + 1).toString())
+                    }
+                    style={styles.decreaseReps}
+                    disabled={set.completed || isRestTimerRunning}
+                  >
+                    <Icon
+                      name="chevron-up"
+                      size={20}
+                      color={
+                        set.completed || isRestTimerRunning
+                          ? colors.border
+                          : colors.textSecondary
+                      }
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() =>
+                      !set.completed &&
+                      !isRestTimerRunning &&
+                      handleRepsChange(
+                        index,
+                        Math.max(0, set.reps - 1).toString()
+                      )
+                    }
+                    style={styles.increaseReps}
+                    disabled={set.completed || isRestTimerRunning}
+                  >
+                    <Icon
+                      name="chevron-down"
+                      size={20}
+                      color={
+                        set.completed || isRestTimerRunning
+                          ? colors.border
+                          : colors.textSecondary
+                      }
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Weight Input & Unit Toggle */}
+                <WeightUnitInput
+                  weightValue={set.weight.toString()}
+                  unitValue={set.unit}
+                  onWeightChange={value => handleWeightChange(index, value)}
+                  onUnitChange={unit => handleUnitChange(index, unit)}
+                  editable={!set.completed && !isRestTimerRunning}
+                />
+
+                {/* Done Button */}
                 <TouchableOpacity
-                  onPress={() =>
-                    !set.completed &&
-                    handleRepsChange(
-                      index,
-                      Math.max(0, set.reps - 1).toString()
-                    )
-                  }
-                  style={styles.increaseReps}
-                  disabled={set.completed}
+                  style={[
+                    styles.setDoneButton,
+                    set.completed && styles.setDoneButtonCompleted,
+                  ]}
+                  onPress={() => handleToggleSetComplete(index)}
+                  disabled={isRestTimerRunning} // Disable during rest
                 >
                   <Icon
-                    name="chevron-down"
+                    name={set.completed ? "check" : "checkbox-blank-outline"}
                     size={20}
-                    color={set.completed ? colors.border : colors.textSecondary}
+                    color={
+                      isRestTimerRunning
+                        ? colors.border
+                        : set.completed
+                          ? colors.buttonText
+                          : colors.textSecondary
+                    }
                   />
                 </TouchableOpacity>
               </View>
 
-              {/* Weight Input & Unit Toggle */}
-              <WeightUnitInput
-                weightValue={set.weight.toString()} // Convert number state to string prop
-                unitValue={set.unit}
-                onWeightChange={value => handleWeightChange(index, value)} // Pass the string value
-                onUnitChange={unit => handleUnitChange(index, unit)}
-                editable={!set.completed}
-                // containerStyle can override default flex if needed
-              />
-
-              {/* Done Button */}
-              <TouchableOpacity
-                style={[
-                  styles.setDoneButton,
-                  set.completed && styles.setDoneButtonCompleted,
-                ]}
-                onPress={() => handleToggleSetComplete(index)}
-              >
-                <Icon
-                  name={set.completed ? "check" : "checkbox-blank-outline"}
-                  size={20}
-                  color={
-                    set.completed ? colors.buttonText : colors.textSecondary
-                  }
-                />
-              </TouchableOpacity>
-            </View>
+              {/* --- Conditional Rest Timer UI --- */}
+              {currentSetIndexForRest === index && (
+                <Animated.View
+                  entering={FadeInDown}
+                  exiting={FadeOutUp}
+                  style={[
+                    styles.restTimerContainer,
+                    isRestTimerRunning && styles.restTimerActiveContainer,
+                  ]}
+                >
+                  {isRestTimerRunning ? (
+                    // Timer Running View
+                    <>
+                      <View style={styles.restTimerTextContainer}>
+                        <Text
+                          style={[
+                            styles.restTimerText,
+                            overtickSeconds > 0 && styles.restTimerTextOvertick,
+                          ]}
+                        >
+                          {/* Show target duration if over ticking, else countdown */}
+                          {formatDuration(
+                            overtickSeconds > 0
+                              ? restTimerDuration
+                              : restTimerSeconds
+                          )}
+                        </Text>
+                        {overtickSeconds > 0 && (
+                          <Text style={styles.restTimerOvertickValue}>
+                            +{overtickSeconds}s
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.restActionButton,
+                          styles.startNextSetButton, // Use new style name
+                        ]}
+                        onPress={handleStartNextSet} // Use new handler name
+                      >
+                        <Icon
+                          name="play" // Changed icon to play for next set
+                          size={18}
+                          color={colors.text}
+                        />
+                        <Text
+                          style={[
+                            styles.restActionButtonText,
+                            styles.startNextSetButtonText, // Use new style name
+                          ]}
+                        >
+                          Start Next Set
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    // Timer Ready View (Adjust buttons remain the same)
+                    <View style={styles.restControlsContainer}>
+                      <TouchableOpacity
+                        style={styles.restAdjustButton}
+                        onPress={() =>
+                          handleAdjustRestDuration(-REST_ADJUST_INCREMENT)
+                        }
+                      >
+                        <Icon
+                          name="minus"
+                          size={20}
+                          color={colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.restActionButton,
+                          styles.startRestButton,
+                        ]}
+                        onPress={() => handleStartRest(index)}
+                      >
+                        <Icon
+                          name="timer-outline"
+                          size={18}
+                          color={colors.buttonText}
+                        />
+                        <Text
+                          style={[
+                            styles.restActionButtonText,
+                            styles.startRestButtonText,
+                          ]}
+                        >
+                          Start Rest
+                        </Text>
+                      </TouchableOpacity>
+                      <Text style={styles.nextRestDurationText}>
+                        ({formatDuration(nextRestDuration)})
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.restAdjustButton}
+                        onPress={() =>
+                          handleAdjustRestDuration(REST_ADJUST_INCREMENT)
+                        }
+                      >
+                        <Icon
+                          name="plus"
+                          size={20}
+                          color={colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </Animated.View>
+              )}
+              {/* --- End Conditional Rest Timer UI --- */}
+            </Animated.View>
           ))}
-        </View>
+        </Animated.View>
       ) : (
+        // Placeholder when no exercise is selected/available
         <View style={{ padding: 20, alignItems: "center" }}>
           <Text style={styles.placeholderText}>
             {workoutExercises.length === 0
@@ -896,14 +1330,15 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       <View style={styles.allExercisesSection}>
         <Text style={styles.allExercisesTitle}>All Exercises</Text>
         {workoutExercises.map((exercise, index) => {
+          // ... (status calculation and styling remains the same)
           const status = getExerciseStatus(exercise);
           let statusIconName: React.ComponentProps<typeof Icon>["name"] =
-            "circle-outline"; // Default: not-started
+            "circle-outline";
           let statusIconColor = colors.textSecondary;
           let itemStyle = styles.exerciseListItem;
 
           if (status === "in-progress") {
-            statusIconName = "circle-slice-5"; // Example icon for in-progress
+            statusIconName = "circle-slice-5";
             statusIconColor = colors.primary;
             itemStyle = {
               ...itemStyle,
@@ -911,20 +1346,20 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
             };
           } else if (status === "completed") {
             statusIconName = "check-circle";
-            statusIconColor = colors.primary; // Or a success color like green
+            statusIconColor = colors.primary;
             itemStyle = { ...itemStyle, ...styles.exerciseListItemCompleted };
           }
 
-          // Add active style if it's the current exercise
           if (index === currentExerciseIndex) {
             itemStyle = { ...itemStyle, ...styles.exerciseListItemActive };
           }
 
           return (
             <TouchableOpacity
-              key={exercise.id}
+              key={exercise.instanceId} // Use instanceId for key
               style={itemStyle}
               onPress={() => handleSelectExercise(index)}
+              disabled={isRestTimerRunning} // Disable switching during rest
             >
               <View style={styles.exerciseListItemContent}>
                 <Icon
