@@ -189,9 +189,7 @@ const DashboardOverviewScreen: React.FC<Props> = ({ navigation }) => {
     placeholderText: {
       textAlign: "center",
       color: colors.textSecondary,
-      marginTop: 10,
       fontSize: 14, // Consistent placeholder size
-      paddingVertical: 10, // Add padding for placeholder text
     },
     resumeCard: {
       backgroundColor: colors.primary,
@@ -416,7 +414,7 @@ const DashboardOverviewScreen: React.FC<Props> = ({ navigation }) => {
             ))}
           </Card>
         ) : (
-          <Card style={{ padding: 15 }}>
+          <Card style={{ marginHorizontal: 0 }}>
             <Text style={styles.placeholderText}>
               No completed workouts yet. Go lift something!
             </Text>

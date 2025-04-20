@@ -16,11 +16,15 @@ import { useTheme } from "@/theme/ThemeContext";
 import { NavigatorScreenParams } from "@react-navigation/native";
 import ActiveWorkoutScreen from "@/screens/ActiveWorkoutScreen";
 import EditWorkoutScreen from "@/screens/EditWokoutScreen";
+import Animated, {
+  FadeInLeft,
+  FadeInRight,
+  FadeOutRight,
+} from "react-native-reanimated";
 
 // Define ParamList for the Stack Navigator
 export type RootStackParamList = {
   Main: NavigatorScreenParams<BottomTabParamList>;
-  Profile: undefined;
   NewWorkout: undefined;
   CreateWorkout: undefined; // <-- Add CreateWorkout route
   WorkoutDetails: { workoutId: string };
@@ -51,7 +55,7 @@ const AppNavigator = () => {
       color: colors.navText, // Use navText for header icons
     },
     headerIconTouchable: {
-      padding: 5,
+      marginLeft: 10,
     },
   });
 
@@ -81,52 +85,47 @@ const AppNavigator = () => {
               style={{ marginHorizontal: 10 }}
             />
           ),
-          headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <TouchableOpacity
-                onPressIn={() => navigation.navigate("NewWorkout")} // Or maybe CreateWorkout directly?
-                style={styles.newWorkoutButton}
+          headerRight: props => {
+            const isProfilesTab =
+              navigation.getState().routes[0].state?.index === 4;
+
+            return (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingRight: 10,
+                }}
               >
-                <Icon
-                  name="plus"
-                  size={16}
-                  color={colors.buttonText}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={styles.newWorkoutButtonText}>New Workout</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPressIn={() => navigation.navigate("Profile")}
-                style={[
-                  styles.headerIconTouchable,
-                  { marginLeft: 15, marginRight: 5 },
-                ]}
-              >
-                <Icon
-                  name="account-circle-outline"
-                  size={26}
-                  style={styles.headerIcon}
-                />
-              </TouchableOpacity>
-            </View>
-          ),
-        })}
-      />
-      <Stack.Screen
-        name="Profile"
-        component={ProfileTopTabNavigator}
-        options={({
-          navigation,
-        }: NativeStackScreenProps<RootStackParamList, "Profile">) => ({
-          title: "Profile",
-          headerRight: () => (
-            <TouchableOpacity
-              onPressIn={() => navigation.navigate("Settings")}
-              style={[styles.headerIconTouchable, { marginRight: 10 }]}
-            >
-              <Icon name="cog-outline" size={24} style={styles.headerIcon} />
-            </TouchableOpacity>
-          ),
+                <TouchableOpacity
+                  onPressIn={() => navigation.navigate("NewWorkout")} // Or maybe CreateWorkout directly?
+                  style={styles.newWorkoutButton}
+                >
+                  <Icon
+                    name="plus"
+                    size={16}
+                    color={colors.buttonText}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text style={styles.newWorkoutButtonText}>New Workout</Text>
+                </TouchableOpacity>
+                {isProfilesTab && (
+                  <Animated.View entering={FadeInRight} exiting={FadeOutRight}>
+                    <TouchableOpacity
+                      onPressIn={() => navigation.navigate("Settings")}
+                      style={styles.headerIconTouchable}
+                    >
+                      <Icon
+                        name="cog-outline"
+                        size={24}
+                        style={styles.headerIcon}
+                      />
+                    </TouchableOpacity>
+                  </Animated.View>
+                )}
+              </View>
+            );
+          },
         })}
       />
       <Stack.Screen

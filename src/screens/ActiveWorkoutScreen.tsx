@@ -43,6 +43,7 @@ import Animated, {
   SlideOutUp,
 } from "react-native-reanimated";
 import AnimatedTimer from "@/components/AnimatedTimer";
+import WeightUnitInput from "@/components/WeightUnitInput";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ActiveWorkout">;
 
@@ -583,56 +584,13 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       position: "relative", // Needed for absolute positioning of +/- buttons
     },
     // Input container for Weight (includes unit buttons)
-    weightInputContainer: {
-      flex: 1.5, // Takes space defined by weightCol
-      flexDirection: "row", // Arrange input and units horizontally
-      alignItems: "center",
-      backgroundColor: colors.background,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingLeft: 8, // Padding before the text input
-      marginHorizontal: 5,
-      minHeight: 40,
-    },
+
     setInput: {
       fontSize: 14,
       color: colors.text,
       textAlign: "center",
       paddingVertical: 8,
     },
-    // Specific style for weight input to control its width within the container
-    weightTextInput: {
-      flex: 1, // Allow input to take available space before units
-      fontSize: 14,
-      color: colors.text,
-      textAlign: "center",
-      paddingVertical: 8,
-    },
-    // Unit toggle buttons
-    unitToggleContainer: {
-      flexDirection: "row",
-      marginLeft: 5, // Space between input and units
-      paddingRight: 5, // Padding inside the border
-    },
-    unitToggleButton: {
-      paddingVertical: 4,
-      paddingHorizontal: 6,
-      borderRadius: 4,
-      marginLeft: 3,
-    },
-    unitToggleButtonSelected: {
-      backgroundColor: colors.primary,
-    },
-    unitToggleText: {
-      fontSize: 12,
-      fontWeight: "bold",
-      color: colors.textSecondary,
-    },
-    unitToggleTextSelected: {
-      color: colors.buttonText,
-    },
-    // Done button
     setDoneButton: {
       width: 50,
       height: 40,
@@ -896,56 +854,14 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
 
               {/* Weight Input & Unit Toggle */}
-              <View style={styles.weightInputContainer}>
-                <TextInput
-                  style={styles.weightTextInput}
-                  value={set.weight.toString()}
-                  onChangeText={value => handleWeightChange(index, value)}
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                  editable={!set.completed}
-                />
-                <View style={styles.unitToggleContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.unitToggleButton,
-                      set.unit === "kg" && styles.unitToggleButtonSelected,
-                    ]}
-                    onPress={() =>
-                      !set.completed && handleUnitChange(index, "kg")
-                    }
-                    disabled={set.completed}
-                  >
-                    <Text
-                      style={[
-                        styles.unitToggleText,
-                        set.unit === "kg" && styles.unitToggleTextSelected,
-                      ]}
-                    >
-                      kg
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.unitToggleButton,
-                      set.unit === "lbs" && styles.unitToggleButtonSelected,
-                    ]}
-                    onPress={() =>
-                      !set.completed && handleUnitChange(index, "lbs")
-                    }
-                    disabled={set.completed}
-                  >
-                    <Text
-                      style={[
-                        styles.unitToggleText,
-                        set.unit === "lbs" && styles.unitToggleTextSelected,
-                      ]}
-                    >
-                      lbs
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              <WeightUnitInput
+                weightValue={set.weight.toString()} // Convert number state to string prop
+                unitValue={set.unit}
+                onWeightChange={value => handleWeightChange(index, value)} // Pass the string value
+                onUnitChange={unit => handleUnitChange(index, unit)}
+                editable={!set.completed}
+                // containerStyle can override default flex if needed
+              />
 
               {/* Done Button */}
               <TouchableOpacity

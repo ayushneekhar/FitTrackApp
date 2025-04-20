@@ -8,7 +8,7 @@ export type WeightUnit = "lbs" | "kg";
 export interface WorkoutSet {
   id: string;
   reps: number;
-  weight: number;
+  weight: string;
   unit: WeightUnit;
 }
 

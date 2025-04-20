@@ -114,11 +114,11 @@ const NewWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     placeholderCard: {
       alignItems: "center",
       paddingVertical: 20,
+      marginHorizontal: 0,
     },
     placeholderText: {
       color: colors.textSecondary,
       textAlign: "center",
-      marginBottom: 15,
     },
     createButton: {
       marginTop: "auto",

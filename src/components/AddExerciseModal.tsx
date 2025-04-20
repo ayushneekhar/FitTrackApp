@@ -186,9 +186,7 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
             marginLeft: 8,
           },
           categoryScrollView: {
-            backgroundColor: colors.background,
             paddingVertical: 8,
-            // Style the container if needed, not the scroll view itself
           },
           categoryButton: {
             marginRight: 8,
