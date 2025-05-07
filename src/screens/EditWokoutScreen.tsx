@@ -43,10 +43,10 @@ import {
 } from "@/constants/exercises";
 import WorkoutTypePicker from "@/components/WorkoutTypePicker";
 import uuid from "react-native-uuid";
+import { DEFAULT_REST_DURATION } from "@/hooks/useRestTimer";
 
 // Define navigation props type, expecting templateId
 type Props = NativeStackScreenProps<RootStackParamList, "EditWorkout">;
-const DEFAULT_REST_DURATION = 60; // Default rest if not set in template
 
 const workoutTypeOptions = [
   "Strength",

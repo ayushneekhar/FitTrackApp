@@ -145,145 +145,6 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
       </TouchableOpacity>
     );
 
-    // --- Styles ---
-    // Adjust styles: remove modalOverlay, modalContainer positioning/maxHeight
-    const styles = useMemo(
-      () =>
-        StyleSheet.create({
-          contentContainer: {
-            flex: 1, // Make content take full height within the sheet
-            backgroundColor: colors.card,
-            paddingHorizontal: 16,
-          },
-          modalHeader: {
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16,
-          },
-          modalTitle: {
-            fontSize: 20,
-            fontWeight: "bold",
-            color: colors.text,
-          },
-          closeButton: {
-            padding: 4,
-          },
-          searchContainer: {
-            flexDirection: "row",
-            alignItems: "center",
-            backgroundColor: colors.background,
-            borderRadius: 8,
-            paddingHorizontal: 8,
-            borderWidth: 1,
-            borderColor: colors.border,
-          },
-          searchInput: {
-            flex: 1,
-            paddingVertical: 8,
-            fontSize: 16,
-            color: colors.text,
-            marginLeft: 8,
-          },
-          categoryScrollView: {
-            paddingVertical: 8,
-          },
-          categoryButton: {
-            marginRight: 8,
-            paddingVertical: 8,
-            paddingHorizontal: 16,
-            borderRadius: 24,
-            backgroundColor: colors.background,
-            borderWidth: 1,
-            borderColor: colors.border,
-          },
-          categoryButtonSelected: {
-            backgroundColor: colors.primary,
-            borderColor: colors.primary,
-          },
-          categoryText: {
-            fontSize: 14,
-            color: colors.textSecondary,
-          },
-          categoryTextSelected: {
-            color: colors.buttonText,
-            fontWeight: "bold",
-          },
-          exerciseList: {
-            flex: 1, // Allow list to take remaining space
-            // Remove maxHeight, sheet controls height
-          },
-          exerciseItem: {
-            flexDirection: "row",
-            alignItems: "center",
-            paddingVertical: 12,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: colors.border,
-          },
-          checkbox: {
-            marginRight: 16,
-            width: 20,
-            height: 20,
-            borderRadius: 4,
-          },
-          exerciseTextContainer: {
-            flex: 1,
-          },
-          exerciseName: {
-            fontSize: 16,
-            color: colors.text,
-            fontWeight: "500",
-          },
-          exerciseDetail: {
-            fontSize: 13,
-            color: colors.textSecondary,
-            marginTop: 2,
-          },
-          footer: {
-            flexDirection: "row",
-            justifyContent: "space-between",
-            marginVertical: 20,
-            paddingHorizontal: 16,
-            paddingTop: 10,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.border,
-          },
-          footerButton: {
-            paddingVertical: 12,
-            paddingHorizontal: 25,
-            borderRadius: 8,
-            alignItems: "center",
-            flex: 1,
-          },
-          cancelButton: {
-            backgroundColor: colors.background,
-            borderWidth: 1,
-            borderColor: colors.border,
-            marginRight: 10,
-          },
-          addButton: {
-            backgroundColor: colors.primary,
-            marginLeft: 10,
-          },
-          buttonText: {
-            fontSize: 16,
-            fontWeight: "bold",
-          },
-          cancelButtonText: {
-            color: colors.text,
-          },
-          addButtonText: {
-            color: colors.buttonText,
-          },
-          emptyListText: {
-            textAlign: "center",
-            color: colors.textSecondary,
-            padding: 20,
-          },
-        }),
-      []
-    );
-
     // --- Render Backdrop ---
     const renderBackdrop = useCallback(
       (props: any) => (
@@ -297,6 +158,8 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
       ),
       []
     );
+
+    const styles = getStyles(colors);
 
     return (
       <BottomSheetModal
@@ -409,3 +272,137 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
 );
 
 export default AddExerciseModal;
+
+const getStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    contentContainer: {
+      flex: 1, // Make content take full height within the sheet
+      backgroundColor: colors.card,
+      paddingHorizontal: 16,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: colors.text,
+    },
+    closeButton: {
+      padding: 4,
+    },
+    searchContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.background,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    searchInput: {
+      flex: 1,
+      paddingVertical: 8,
+      fontSize: 16,
+      color: colors.text,
+      marginLeft: 8,
+    },
+    categoryScrollView: {
+      paddingVertical: 8,
+    },
+    categoryButton: {
+      marginRight: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 24,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    categoryButtonSelected: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    categoryText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+    },
+    categoryTextSelected: {
+      color: colors.buttonText,
+      fontWeight: "bold",
+    },
+    exerciseList: {
+      flex: 1, // Allow list to take remaining space
+      // Remove maxHeight, sheet controls height
+    },
+    exerciseItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    checkbox: {
+      marginRight: 16,
+      width: 20,
+      height: 20,
+      borderRadius: 4,
+    },
+    exerciseTextContainer: {
+      flex: 1,
+    },
+    exerciseName: {
+      fontSize: 16,
+      color: colors.text,
+      fontWeight: "500",
+    },
+    exerciseDetail: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    footer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginVertical: 20,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    footerButton: {
+      paddingVertical: 12,
+      paddingHorizontal: 25,
+      borderRadius: 8,
+      alignItems: "center",
+      flex: 1,
+    },
+    cancelButton: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginRight: 10,
+    },
+    addButton: {
+      backgroundColor: colors.primary,
+      marginLeft: 10,
+    },
+    buttonText: {
+      fontSize: 16,
+      fontWeight: "bold",
+    },
+    cancelButtonText: {
+      color: colors.text,
+    },
+    addButtonText: {
+      color: colors.buttonText,
+    },
+    emptyListText: {
+      textAlign: "center",
+      color: colors.textSecondary,
+      padding: 20,
+    },
+  });

@@ -54,10 +54,27 @@ import DraggableFlatList, {
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { lightColors } from "@/theme/colors"; // For style function type
 import WeightUnitInput from "@/components/WeightUnitInput";
+import { WorkoutDetailsForm } from "@/components/WorkoutDetailsForm";
+import ExerciseList from "@/components/ExerciseList";
+import { useWorkoutDraft } from "@/hooks/useWorkoutDraft";
+import { useExerciseManagement } from "@/hooks/useExerciseManagement";
+import { useWorkoutValidation } from "@/hooks/useWorkoutValidation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CreateWorkout">;
 
 const DEFAULT_REST_DURATION = 60; // Default rest if not set in template
+
+// Define ExerciseStatus type here or import from where ExerciseList gets it
+type ExerciseStatus = "not-started" | "in-progress" | "completed";
+// Define ActiveWorkoutExercise and ActiveWorkoutSet for mapping
+// This is a simplified version, ensure it matches the one expected by ExerciseList
+interface ActiveWorkoutSet extends WorkoutSet {
+  completed: boolean;
+  restTakenSeconds?: number;
+}
+interface ActiveWorkoutExercise extends WorkoutExercise {
+  sets: ActiveWorkoutSet[];
+}
 
 const workoutTypeOptions = [
   "Strength",
@@ -300,33 +317,64 @@ const getStyles = (colors: ScreenColors) =>
   });
 
 const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
-  const { colors, preferences } = useTheme(); // Get preferences
-  const styles = useMemo(() => getStyles(colors), [colors]); // Memoize styles
-  const defaultUnit = preferences.defaultWeightUnit; // Get default unit
+  const { colors, preferences } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+  const defaultUnit = preferences.defaultWeightUnit;
 
   const [workoutName, setWorkoutName] = useState("");
   const [workoutType, setWorkoutType] = useState<string | null>(null);
   const [duration, setDuration] = useState("");
   const [addedExercises, setAddedExercises] = useState<WorkoutExercise[]>([]);
-  const [isModalVisible, setIsModalVisible] = useState(false); // No longer needed for BottomSheet
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const savedRef = useRef(false);
   const addExerciseModalRef = useRef<BottomSheetModal>(null);
 
+  const {
+    exercises,
+    addExercises,
+    removeExercise,
+    addSet,
+    removeSet,
+    updateReps,
+    updateWeight,
+    updateUnit,
+    updateRest,
+  } = useExerciseManagement({
+    defaultUnit,
+  });
+
+  const { hasUnsavedChanges } = useWorkoutDraft({
+    workoutName,
+    workoutType,
+    duration,
+    addedExercises: exercises,
+  });
+
+  const { validateWorkout } = useWorkoutValidation({
+    workoutName,
+    exercises,
+  });
+
+  const getExerciseStatusForTemplate = useCallback(
+    (exercise: ActiveWorkoutExercise): ExerciseStatus => {
+      // In template creation, exercises don't have an active status
+      return "not-started";
+    },
+    []
+  );
+
   const handlePresentModalPress = useCallback(() => {
     addExerciseModalRef.current?.present();
   }, []);
 
-  // useEffect for unsaved changes (no change needed)
   useEffect(() => {
     if (!isInitialLoad) {
-      setHasUnsavedChanges(true);
+      setIsInitialLoad(false);
     }
   }, [workoutName, workoutType, duration, addedExercises, isInitialLoad]);
 
-  // useEffect for loading draft (no change needed for unit logic here)
   useEffect(() => {
     const draft = getWorkoutDraft(null);
     if (draft) {
@@ -349,16 +397,15 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
               setWorkoutName(draft.name);
               setWorkoutType(draft.type);
               setDuration(draft.durationEstimate?.toString() || "");
-              // Map draft exercises, ensuring sets have IDs and default unit if missing
               const exercisesWithSetIdsAndUnits = draft.exercises.map(ex => ({
                 ...ex,
                 sets: ex.sets.map(set => ({
                   ...set,
                   id: set.id || (uuid.v4() as string),
                   weight: (set.weight || 0).toString(),
-                  unit: (set as any).unit || defaultUnit, // Add unit from draft or default
+                  unit: (set as any).unit || defaultUnit,
                 })),
-                defaultRestSeconds: ex.defaultRestSeconds, // <-- Load rest time
+                defaultRestSeconds: ex.defaultRestSeconds,
               }));
               setAddedExercises(exercisesWithSetIdsAndUnits);
               setIsInitialLoad(false);
@@ -371,9 +418,8 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
       setIsInitialLoad(false);
     }
     savedRef.current = false;
-  }, [defaultUnit]); // Add defaultUnit dependency
+  }, [defaultUnit]);
 
-  // useEffect for saving draft on navigation (no change needed for unit logic here)
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", e => {
       if (!hasUnsavedChanges || savedRef.current || isInitialLoad) return;
@@ -383,7 +429,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         name: workoutName,
         type: workoutType,
         durationEstimate: duration ? parseInt(duration, 10) : undefined,
-        // Map state back to draft structure (omitting unit)
         exercises: addedExercises.map(ex => ({
           instanceId: ex.instanceId,
           id: ex.id,
@@ -392,9 +437,8 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
             id: set.id,
             reps: set.reps,
             weight: set.weight,
-            // unit is NOT saved in the draft/template structure
           })),
-          defaultRestSeconds: ex.defaultRestSeconds, // <-- Save rest time
+          defaultRestSeconds: ex.defaultRestSeconds,
         })),
         timestamp: Date.now(),
       };
@@ -417,7 +461,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
   const defaultWeight = 0;
   const defaultSetCount = 3;
 
-  // --- Create Default Sets (with default unit) ---
   const createDefaultSets = useCallback((): WorkoutSet[] => {
     const sets: WorkoutSet[] = [];
     for (let i = 0; i < defaultSetCount; i++) {
@@ -425,13 +468,12 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         id: uuid.v4() as string,
         reps: defaultReps,
         weight: defaultWeight.toString(),
-        unit: defaultUnit, // Use default unit from theme context
+        unit: defaultUnit,
       });
     }
     return sets;
-  }, [defaultUnit]); // Depend on defaultUnit
+  }, [defaultUnit]);
 
-  // --- Handle Adding Exercises from Modal (uses createDefaultSets) ---
   const handleAddExercisesFromModal = useCallback(
     (selectedExercises: Exercise[]) => {
       const newWorkoutExercises: WorkoutExercise[] = selectedExercises.map(
@@ -439,180 +481,29 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
           ...ex,
           instanceId: uuid.v4() as string,
           sets: createDefaultSets(),
-          defaultRestSeconds: DEFAULT_REST_DURATION, // <-- Set default rest
+          defaultRestSeconds: DEFAULT_REST_DURATION,
         })
       );
-      setAddedExercises(prevExercises => [
-        ...prevExercises,
-        ...newWorkoutExercises,
-      ]);
-      // Modal closing is handled by the component itself now
+
+      addExercises(newWorkoutExercises);
     },
-    [createDefaultSets]
-  ); // Depend on createDefaultSets
+    [createDefaultSets, addExercises]
+  );
 
-  // --- Remove Exercise (no change needed) ---
-  const removeExercise = (instanceIdToRemove: string) => {
-    setAddedExercises(prev =>
-      prev.filter(ex => ex.instanceId !== instanceIdToRemove)
-    );
-  };
-
-  // --- Add Set (with default unit) ---
-  const handleAddSet = (instanceId: string) => {
-    setAddedExercises(prevExercises =>
-      prevExercises.map(ex => {
-        if (ex.instanceId === instanceId) {
-          const newSet: WorkoutSet = {
-            id: uuid.v4() as string,
-            reps: defaultReps,
-            weight: defaultWeight,
-            unit: defaultUnit, // Add default unit
-          };
-          return { ...ex, sets: [...ex.sets, newSet] };
-        }
-        return ex;
-      })
-    );
-  };
-
-  // --- Remove Set (no change needed) ---
-  const handleRemoveSet = (instanceId: string, setIdToRemove: string) => {
-    setAddedExercises(prevExercises =>
-      prevExercises.map(ex => {
-        if (ex.instanceId === instanceId) {
-          if (ex.sets.length <= 1) {
-            Alert.alert(
-              "Cannot Remove",
-              "Each exercise must have at least one set."
-            );
-            return ex;
-          }
-          const updatedSets = ex.sets.filter(set => set.id !== setIdToRemove);
-          return { ...ex, sets: updatedSets };
-        }
-        return ex;
-      })
-    );
-  };
-
-  // --- Update Reps (no change needed) ---
-  const handleRepChange = (
-    instanceId: string,
-    setId: string,
-    newReps: string
-  ) => {
-    const reps = parseInt(newReps, 10);
-    setAddedExercises(prevExercises =>
-      prevExercises.map(ex => {
-        if (ex.instanceId === instanceId) {
-          const updatedSets = ex.sets.map(set => {
-            if (set.id === setId) {
-              return { ...set, reps: isNaN(reps) ? 0 : reps };
-            }
-            return set;
-          });
-          return { ...ex, sets: updatedSets };
-        }
-        return ex;
-      })
-    );
-  };
-
-  // --- Update Weight (no change needed) ---
-  const handleWeightChange = (
-    instanceId: string,
-    setId: string,
-    newWeight: string
-  ) => {
-    const cleanedWeight = newWeight.replace(/[^0-9.]/g, ""); // Remove non-numeric/non-dot chars
-    const parts = cleanedWeight.split(".");
-    const validatedWeight =
-      parts.length > 1
-        ? `${parts[0]}.${parts.slice(1).join("")}`
-        : cleanedWeight; // Ensure only one dot
-    setAddedExercises(prevExercises =>
-      prevExercises.map(ex => {
-        if (ex.instanceId === instanceId) {
-          const updatedSets = ex.sets.map(set => {
-            if (set.id === setId) {
-              return { ...set, weight: validatedWeight };
-            }
-            return set;
-          });
-          return { ...ex, sets: updatedSets };
-        }
-        return ex;
-      })
-    );
-  };
-
-  // --- NEW: Update Unit ---
-  const handleUnitChange = (
-    instanceId: string,
-    setId: string,
-    newUnit: WeightUnit
-  ) => {
-    setAddedExercises(prevExercises =>
-      prevExercises.map(ex => {
-        if (ex.instanceId === instanceId) {
-          const updatedSets = ex.sets.map(set => {
-            if (set.id === setId) {
-              return { ...set, unit: newUnit };
-            }
-            return set;
-          });
-          return { ...ex, sets: updatedSets };
-        }
-        return ex;
-      })
-    );
-  };
-
-  const handleRestChange = (instanceId: string, newRest: string) => {
-    const rest = parseInt(newRest, 10);
-    setAddedExercises(prevExercises =>
-      prevExercises.map(ex => {
-        if (ex.instanceId === instanceId) {
-          return {
-            ...ex,
-            defaultRestSeconds: isNaN(rest) ? undefined : rest,
-          };
-        }
-        return ex;
-      })
-    );
-  };
-
-  // --- Save Workout Logic (Omitting unit from saved template) ---
   const handleSaveWorkout = useCallback(() => {
-    if (!workoutName.trim()) {
-      Alert.alert("Missing Name", "Please enter a name for the workout.");
-      return;
-    }
-    if (addedExercises.length === 0) {
-      Alert.alert(
-        "Missing Exercises",
-        "Please add at least one exercise to the workout."
-      );
-      return;
-    }
+    if (!validateWorkout()) return;
 
-    // Map to the structure expected by storage (WorkoutTemplateExercise)
-    // This structure currently does NOT include 'unit'
-    const exercisesToSave: WorkoutTemplateExercise[] = addedExercises.map(
-      ex => ({
-        instanceId: ex.instanceId,
-        id: ex.id,
-        name: ex.name,
-        sets: ex.sets.map(set => ({
-          id: set.id,
-          reps: Number(set.reps) || 0,
-          weight: parseFloat(set.weight) || 0,
-        })),
-        defaultRestSeconds: ex.defaultRestSeconds, // <-- Save rest time
-      })
-    );
+    const exercisesToSave: WorkoutTemplateExercise[] = exercises.map(ex => ({
+      instanceId: ex.instanceId,
+      id: ex.id,
+      name: ex.name,
+      sets: ex.sets.map(set => ({
+        id: set.id,
+        reps: Number(set.reps) || 0,
+        weight: parseFloat(set.weight) || 0,
+      })),
+      defaultRestSeconds: ex.defaultRestSeconds,
+    }));
 
     const templateToSave: WorkoutTemplate = {
       id: uuid.v4() as string,
@@ -631,131 +522,16 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
     clearWorkoutDraft(null);
     Alert.alert("Success", "Workout template saved!");
     navigation.goBack();
-  }, [workoutName, workoutType, duration, addedExercises, navigation]);
+  }, [
+    workoutName,
+    workoutType,
+    duration,
+    exercises,
+    navigation,
+    validateWorkout,
+    savedRef,
+  ]);
 
-  // --- Render Item for DraggableFlatList (Updated with Unit Toggles) ---
-  const renderExerciseItem = useCallback(
-    ({ item: ex, drag, isActive }: RenderItemParams<WorkoutExercise>) => {
-      return (
-        <ScaleDecorator activeScale={1.04}>
-          <TouchableOpacity
-            onLongPress={drag}
-            disabled={isActive}
-            style={[
-              styles.exerciseCard,
-              { backgroundColor: isActive ? colors.border : colors.card },
-            ]}
-          >
-            {/* Exercise Header (no change) */}
-            <View style={styles.exerciseHeader}>
-              <View style={styles.exerciseInfo}>
-                <Text style={styles.exerciseName}>{ex.name}</Text>
-                <Text style={styles.exerciseDetail}>
-                  {ex.type} • {ex.category}
-                </Text>
-              </View>
-              <View style={styles.restInputContainer}>
-                <Text style={styles.restInputLabel}>Default Rest:</Text>
-                <TextInput
-                  style={styles.restTextInput}
-                  value={(ex.defaultRestSeconds ?? "").toString()}
-                  onChangeText={text => handleRestChange(ex.instanceId, text)}
-                  placeholder={`${DEFAULT_REST_DURATION}`} // Show default as placeholder
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="number-pad"
-                  selectTextOnFocus
-                />
-                <Text style={styles.restInputUnit}>sec</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.removeExerciseButton}
-                onPress={() => removeExercise(ex.instanceId)}
-              >
-                <Icon
-                  name="close-circle-outline"
-                  size={22}
-                  color={colors.destructive}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Sets Container */}
-            <View style={styles.setsContainer}>
-              {ex.sets.map((set, setIndex) => (
-                <View key={set.id} style={styles.setRow}>
-                  <Text style={styles.setNumber}>{setIndex + 1}</Text>
-                  {/* Reps Input */}
-                  <View style={styles.repsInputContainer}>
-                    <TextInput
-                      style={styles.setInput}
-                      value={set.reps.toString()}
-                      onChangeText={text =>
-                        handleRepChange(ex.instanceId, set.id, text)
-                      }
-                      keyboardType="number-pad"
-                      selectTextOnFocus
-                    />
-                  </View>
-                  {/* Weight Input & Unit Toggle */}
-                  <WeightUnitInput
-                    weightValue={set.weight}
-                    unitValue={set.unit}
-                    onWeightChange={text =>
-                      handleWeightChange(ex.instanceId, set.id, text)
-                    }
-                    onUnitChange={unit =>
-                      handleUnitChange(ex.instanceId, set.id, unit)
-                    }
-                    // containerStyle can be used to override default flex if needed
-                  />
-                  {/* Remove Set Button */}
-                  <TouchableOpacity
-                    style={styles.removeSetButton}
-                    onPress={() => handleRemoveSet(ex.instanceId, set.id)}
-                    disabled={ex.sets.length <= 1}
-                  >
-                    <Icon
-                      name="minus-circle-outline"
-                      size={20}
-                      color={
-                        ex.sets.length <= 1 ? colors.border : colors.destructive
-                      }
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-
-            {/* Add Set Button (no change) */}
-            <TouchableOpacity
-              style={styles.addSetButton}
-              onPress={() => handleAddSet(ex.instanceId)}
-            >
-              <Icon
-                name="plus-circle-outline"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addSetButtonText}>Add Set</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </ScaleDecorator>
-      );
-    },
-    [
-      styles,
-      colors,
-      removeExercise,
-      handleRepChange,
-      handleWeightChange,
-      handleRestChange,
-      handleUnitChange,
-      handleRemoveSet,
-      handleAddSet,
-    ] // Add handlers
-  );
-
-  // --- Add Save Button to Header (no change needed) ---
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -770,112 +546,74 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, handleSaveWorkout, styles]); // Add styles dependency
+  }, [navigation, handleSaveWorkout, styles]);
 
-  // --- Main Render ---
+  // Map exercises for ExerciseList
+  const exercisesForList: ActiveWorkoutExercise[] = useMemo(() => {
+    return exercises.map(ex => ({
+      ...ex,
+      sets: ex.sets.map(set => ({
+        ...set,
+        completed: false, // Default for template screen
+        // Ensure other fields of ActiveWorkoutSet if necessary, like restTakenSeconds
+      })),
+    }));
+  }, [exercises]);
+
   return (
-    <>
-      <DraggableFlatList
-        data={addedExercises}
-        renderItem={renderExerciseItem}
-        keyExtractor={item => item.instanceId}
-        onDragEnd={({ data }) => {
-          setAddedExercises(data);
-        }}
-        containerStyle={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled" // Keep this
-        ListHeaderComponent={
-          <>
-            <Text style={styles.sectionTitle}>Workout Details</Text>
-            <Card style={{ marginHorizontal: 0, padding: 15 }}>
-              <View style={{ marginBottom: 15 }}>
-                <Text style={styles.inputLabel}>Workout Name *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g., Upper Body Strength"
-                  placeholderTextColor={colors.textSecondary}
-                  value={workoutName}
-                  onChangeText={setWorkoutName}
-                />
-              </View>
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { marginRight: 8 }]}>
-                  <Text style={styles.inputLabel}>Workout Type</Text>
-                  <WorkoutTypePicker
-                    options={workoutTypeOptions}
-                    selectedValue={workoutType}
-                    onValueChange={setWorkoutType}
-                    placeholder="Select type"
-                  />
-                </View>
-                <View style={[styles.inputGroup, { marginLeft: 8 }]}>
-                  <Text style={styles.inputLabel}>Est. Duration (min)</Text>
-                  <View style={styles.durationInputContainer}>
-                    <TextInput
-                      style={styles.durationInput}
-                      placeholder="e.g., 60"
-                      placeholderTextColor={colors.textSecondary}
-                      value={duration}
-                      onChangeText={setDuration}
-                      keyboardType="numeric"
-                    />
-                    <Icon
-                      name="clock-outline"
-                      size={20}
-                      color={colors.textSecondary}
-                    />
-                  </View>
-                </View>
-              </View>
-            </Card>
-            <Text style={styles.sectionTitle}>Exercises *</Text>
-            {addedExercises.length === 0 && !isInitialLoad ? (
-              <View style={styles.placeholderContainer}>
-                <Icon name="dumbbell" size={40} color={colors.textSecondary} />
-                <Text style={styles.placeholderText}>
-                  No exercises added yet
-                </Text>
-                <TouchableOpacity
-                  style={styles.addExerciseButton}
-                  onPress={handlePresentModalPress}
-                >
-                  <Icon name="plus" size={20} color={colors.primary} />
-                  <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </>
-        }
-        ListFooterComponent={
-          addedExercises.length > 0 ? (
-            <TouchableOpacity
-              style={styles.addExerciseButton}
-              onPress={handlePresentModalPress}
-            >
-              <Icon name="plus" size={20} color={colors.primary} />
-              <Text style={styles.addExerciseButtonText}>
-                Add More Exercises
-              </Text>
-            </TouchableOpacity>
-          ) : null
-        }
-        ListEmptyComponent={
-          isInitialLoad ? (
-            <ActivityIndicator
-              style={{ marginTop: 50 }}
-              color={colors.primary}
-            />
-          ) : null
-        }
+    <View style={styles.container}>
+      <WorkoutDetailsForm
+        workoutName={workoutName}
+        workoutType={workoutType}
+        duration={duration}
+        onNameChange={setWorkoutName}
+        onTypeChange={setWorkoutType}
+        onDurationChange={setDuration}
+        workoutTypeOptions={workoutTypeOptions}
       />
+
+      <ExerciseList
+        exercises={exercisesForList} // Use mapped exercises
+        isInitialLoad={isInitialLoad}
+        onExercisesReorder={newExercises => {
+          // Need to map back or adjust useExerciseManagement to handle ActiveWorkoutExercise
+          // For now, this might cause issues if useExerciseManagement expects WorkoutExercise
+          // A proper fix would be to make useExerciseManagement also use ActiveWorkoutExercise
+          // or have ExerciseList be more flexible.
+          // Quick fix: map back, but this is not ideal.
+          const mappedBackExercises: WorkoutExercise[] = newExercises.map(
+            ex => ({
+              ...ex,
+              sets: ex.sets.map(set => {
+                const { completed, restTakenSeconds, ...restOfSet } = set;
+                return restOfSet;
+              }),
+            })
+          );
+          setAddedExercises(mappedBackExercises);
+        }}
+        onRemoveExercise={removeExercise}
+        onAddSet={addSet}
+        onRemoveSet={removeSet}
+        onRepsChange={updateReps}
+        onWeightChange={updateWeight}
+        onUnitChange={updateUnit}
+        onRestChange={updateRest}
+        onAddExercise={handlePresentModalPress}
+        // Props required by ExerciseList as seen in ActiveWorkoutScreen
+        getExerciseStatus={getExerciseStatusForTemplate}
+        currentExerciseIndex={-1} // No current exercise in create mode
+        onSelectExercise={() => {}} // No selection logic in create mode
+        disabled={false} // Not disabled in create mode
+      />
+
       <AddExerciseModal
         ref={addExerciseModalRef}
-        onClose={() => {}} // onClose is handled internally by dismiss
+        onClose={() => {}}
         onAddExercises={handleAddExercisesFromModal}
         allExercises={DUMMY_EXERCISES}
       />
-    </>
+    </View>
   );
 };
 

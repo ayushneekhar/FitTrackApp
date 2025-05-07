@@ -1,7 +1,7 @@
 // src/theme/colors.ts
 
 // Define interfaces for your color palettes
-interface ColorPalette {
+export interface ColorPalette {
   primary: string;
   background: string;
   card: string;
