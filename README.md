@@ -1,6 +1,13 @@
-# Welcome to your Expo app 👋
+# FitTrackApp 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+FitTrackApp is a mobile application built with [Expo](https://expo.dev) and React Native, designed to be your personal fitness companion. It helps users plan, track, and analyze their workouts effectively.
+
+**Key Features:**
+*   **Workout Creation & Management:** Easily create, customize, and save your workout routines.
+*   **Exercise Tracking:** Log exercises, sets, reps, and weights during your workouts.
+*   **Timers:** Integrated rest and workout timers to keep you on track.
+*   **Progress Monitoring:** View your workout history and track your progress over time with analytics.
+*   **User Profiles:** Manage your personal fitness profile and view stats.
 
 ## Get started
 
@@ -48,3 +55,27 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## How to Contribute
+
+We welcome contributions to FitTrackApp! If you're interested in helping improve the app, please consider the following:
+
+**Reporting Bugs:**
+- If you find a bug, please open an issue on our GitHub repository.
+- Describe the bug in detail, including steps to reproduce it, expected behavior, and actual behavior.
+- Include information about your environment (e.g., device, OS version) if relevant.
+
+**Suggesting Enhancements:**
+- If you have an idea for a new feature or an improvement to an existing one, please open an issue to discuss it.
+- Provide a clear and detailed explanation of your suggestion and why it would be beneficial.
+
+**Making Code Contributions:**
+1.  **Fork the repository** to your own GitHub account.
+2.  **Create a new branch** for your changes: `git checkout -b feature/your-feature-name` or `bugfix/your-bug-fix`.
+3.  **Make your changes** and ensure they follow the project's coding style (if specified).
+4.  **Test your changes** thoroughly.
+5.  **Commit your changes** with a clear and descriptive commit message.
+6.  **Push your branch** to your forked repository: `git push origin feature/your-feature-name`.
+7.  **Open a pull request** to the main repository, detailing the changes you've made.
+
+We appreciate your help in making FitTrackApp better!
