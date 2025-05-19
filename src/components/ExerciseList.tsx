@@ -5,14 +5,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  FlatList,
 } from "react-native";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/theme/ThemeContext";
 import { ActiveWorkoutExercise } from "@/hooks/useWorkoutState"; // Import type
-import DraggableFlatList, {
-  RenderItemParams,
-  ScaleDecorator,
-} from "react-native-draggable-flatlist";
 import { WorkoutExercise } from "@/services/storage";
 import ExerciseCard from "./ExerciseCard";
 
@@ -25,7 +22,6 @@ interface Props {
   onSelectExercise: (index: number) => void;
   getExerciseStatus: (exercise: ActiveWorkoutExercise) => ExerciseStatus;
   isInitialLoad: boolean;
-  onExercisesReorder: (exercises: ActiveWorkoutExercise[]) => void;
   onRemoveExercise: (instanceId: string) => void;
   onAddSet: (instanceId: string) => void;
   onRemoveSet: (instanceId: string, setId: string) => void;
@@ -42,8 +38,6 @@ const ExerciseList: React.FC<Props> = ({
   disabled,
   onSelectExercise,
   getExerciseStatus,
-  isInitialLoad,
-  onExercisesReorder,
   onRemoveExercise,
   onAddSet,
   onRemoveSet,
@@ -56,11 +50,7 @@ const ExerciseList: React.FC<Props> = ({
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
-  const renderExerciseItem = ({
-    item,
-    drag,
-    isActive,
-  }: RenderItemParams<ActiveWorkoutExercise>) => {
+  const renderExerciseItem = ({ item }: { item: ActiveWorkoutExercise }) => {
     const status = getExerciseStatus(item);
     let statusIconName: React.ComponentProps<typeof Icon>["name"] =
       "circle-outline";
@@ -77,93 +67,88 @@ const ExerciseList: React.FC<Props> = ({
       itemStyle.push(styles.exerciseListItemCompleted);
     }
 
-    if (isActive) {
-      itemStyle.push(styles.exerciseListItemActive);
-    }
     if (disabled) {
       itemStyle.push(styles.disabledItem); // Add disabled style
     }
 
     return (
-      <ScaleDecorator activeScale={1.04}>
-        <TouchableOpacity
-          onLongPress={drag}
-          disabled={isActive}
-          style={itemStyle}
-        >
-          <ExerciseCard
-            exercise={item}
-            onRemove={() => onRemoveExercise(item.instanceId)}
-            onAddSet={() => onAddSet(item.instanceId)}
-            onRemoveSet={setId => onRemoveSet(item.instanceId, setId)}
-            onRepsChange={(setId, reps) =>
-              onRepsChange(item.instanceId, setId, reps)
-            }
-            onWeightChange={(setId, weight) =>
-              onWeightChange(item.instanceId, setId, weight)
-            }
-            onUnitChange={(setId, unit) =>
-              onUnitChange(item.instanceId, setId, unit)
-            }
-            onRestChange={rest => onRestChange(item.instanceId, rest)}
-          />
-        </TouchableOpacity>
-      </ScaleDecorator>
+      <TouchableOpacity
+        style={itemStyle}
+        onPress={() => onSelectExercise(item)}
+        disabled={disabled}
+      >
+        <ExerciseCard
+          exercise={item}
+          onRemove={() => onRemoveExercise(item.instanceId)}
+          onAddSet={() => onAddSet(item.instanceId)}
+          onRemoveSet={setId => onRemoveSet(item.instanceId, setId)}
+          onRepsChange={(setId, reps) =>
+            onRepsChange(item.instanceId, setId, reps)
+          }
+          onWeightChange={(setId, weight) =>
+            onWeightChange(item.instanceId, setId, weight)
+          }
+          onUnitChange={(setId, unit) =>
+            onUnitChange(item.instanceId, setId, unit)
+          }
+          onRestChange={rest => onRestChange(item.instanceId, rest)}
+        />
+      </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.allExercisesSection}>
       <Text style={styles.allExercisesTitle}>All Exercises</Text>
-      {exercises.length === 0 && !isInitialLoad ? (
-        <View style={styles.placeholderContainer}>
-          <Icon name="dumbbell" size={40} color={colors.textSecondary} />
-          <Text style={styles.placeholderText}>No exercises added yet</Text>
-          <TouchableOpacity
-            style={styles.addExerciseButton}
-            onPress={onAddExercise}
-          >
-            <Icon name="plus" size={20} color={colors.primary} />
-            <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={{ flex: 1 }}>
-          <DraggableFlatList
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-            data={exercises}
-            renderItem={renderExerciseItem}
-            keyExtractor={item => item.instanceId}
-            onDragEnd={({ data }) => onExercisesReorder(data)}
-            ListEmptyComponent={
-              isInitialLoad ? (
-                <ActivityIndicator
-                  style={{ marginTop: 50 }}
-                  color={colors.primary}
-                />
-              ) : null
-            }
-            ListFooterComponent={
-              exercises.length > 0 ? (
-                <TouchableOpacity
-                  style={styles.addExerciseButton}
-                  onPress={onAddExercise}
-                >
-                  <Icon name="plus" size={20} color={colors.primary} />
-                  <Text style={styles.addExerciseButtonText}>
-                    Add More Exercises
-                  </Text>
-                </TouchableOpacity>
-              ) : null
-            }
-          />
-        </View>
-      )}
+      <View style={{ flex: 1 }}>
+        <FlatList
+          removeClippedSubviews={false}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          data={exercises}
+          renderItem={renderExerciseItem}
+          keyExtractor={item => item.instanceId}
+          ListEmptyComponent={
+            <View style={styles.placeholderContainer}>
+              <Icon name="dumbbell" size={40} color={colors.textSecondary} />
+              <Text style={styles.placeholderText}>No exercises added yet</Text>
+              <TouchableOpacity
+                style={styles.addExerciseButton}
+                onPress={onAddExercise}
+              >
+                <Icon name="plus" size={20} color={colors.primary} />
+                <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
+              </TouchableOpacity>
+            </View>
+          }
+          ListFooterComponent={
+            exercises.length > 0 ? (
+              <TouchableOpacity
+                style={styles.addExerciseButton}
+                onPress={onAddExercise}
+              >
+                <Icon name="plus" size={20} color={colors.primary} />
+                <Text style={styles.addExerciseButtonText}>
+                  Add More Exercises
+                </Text>
+              </TouchableOpacity>
+            ) : null
+          }
+        />
+        {/* {exercises.map(item => renderExerciseItem({ item }))} */}
+        <TouchableOpacity
+          style={styles.addExerciseButton}
+          onPress={onAddExercise}
+        >
+          <Icon name="plus" size={20} color={colors.primary} />
+          <Text style={styles.addExerciseButtonText}>Add More Exercises</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
-// Styles (similar to original, adapted)
+export default React.memo(ExerciseList);
+
 const createStyles = (colors: any) =>
   StyleSheet.create({
     allExercisesSection: {
@@ -255,5 +240,3 @@ const createStyles = (colors: any) =>
       opacity: 0.5, // General disabled style for the list item
     },
   });
-
-export default React.memo(ExerciseList);

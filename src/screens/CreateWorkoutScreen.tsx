@@ -6,13 +6,13 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import { Alert } from "react-native";
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
@@ -47,10 +47,6 @@ import {
 } from "@/constants/exercises";
 import WorkoutTypePicker from "@/components/WorkoutTypePicker";
 import uuid from "react-native-uuid";
-import DraggableFlatList, {
-  RenderItemParams,
-  ScaleDecorator,
-} from "react-native-draggable-flatlist";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { lightColors } from "@/theme/colors"; // For style function type
 import WeightUnitInput from "@/components/WeightUnitInput";
@@ -95,6 +91,196 @@ const DUMMY_EXERCISES: Exercise[] = [
 ];
 
 type ScreenColors = typeof lightColors; // Or define a specific interface
+
+const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
+  const { colors, preferences } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+  const defaultUnit = preferences.defaultWeightUnit;
+
+  const [workoutName, setWorkoutName] = useState("");
+  const [workoutType, setWorkoutType] = useState<string | null>(null);
+  const [duration, setDuration] = useState("");
+  const [addedExercises, setAddedExercises] = useState<WorkoutExercise[]>([]);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+
+  const savedRef = useRef(false);
+  const addExerciseModalRef = useRef<BottomSheetModal>(null);
+
+  const {
+    exercises,
+    addExercises,
+    removeExercise,
+    addSet,
+    removeSet,
+    updateReps,
+    updateWeight,
+    updateUnit,
+    updateRest,
+  } = useExerciseManagement({
+    defaultUnit,
+  });
+
+  const { hasUnsavedChanges } = useWorkoutDraft({
+    workoutName,
+    workoutType,
+    duration,
+    addedExercises: exercises,
+    setAddedExercises,
+    setWorkoutName,
+    setWorkoutType,
+    setDuration,
+    defaultUnit,
+  });
+
+  const { validateWorkout } = useWorkoutValidation({
+    workoutName,
+    exercises,
+  });
+
+  const getExerciseStatusForTemplate = useCallback(
+    (exercise: ActiveWorkoutExercise): ExerciseStatus => {
+      // In template creation, exercises don't have an active status
+      return "not-started";
+    },
+    []
+  );
+
+  const handlePresentModalPress = useCallback(() => {
+    addExerciseModalRef.current?.present();
+  }, []);
+
+  const defaultReps = 12;
+  const defaultWeight = 0;
+  const defaultSetCount = 3;
+
+  const createDefaultSets = useCallback((): WorkoutSet[] => {
+    const sets: WorkoutSet[] = [];
+    for (let i = 0; i < defaultSetCount; i++) {
+      sets.push({
+        id: uuid.v4() as string,
+        reps: defaultReps,
+        weight: defaultWeight.toString(),
+        unit: defaultUnit,
+      });
+    }
+    return sets;
+  }, [defaultUnit]);
+
+  const handleAddExercisesFromModal = useCallback(
+    (selectedExercises: Exercise[]) => {
+      const newWorkoutExercises: WorkoutExercise[] = selectedExercises.map(
+        ex => ({
+          ...ex,
+          instanceId: uuid.v4() as string,
+          sets: createDefaultSets(),
+          defaultRestSeconds: DEFAULT_REST_DURATION,
+        })
+      );
+
+      addExercises(newWorkoutExercises);
+    },
+    [createDefaultSets, addExercises]
+  );
+
+  const handleSaveWorkout = useCallback(() => {
+    if (!validateWorkout()) return;
+
+    const exercisesToSave: WorkoutTemplateExercise[] = exercises.map(ex => ({
+      instanceId: ex.instanceId,
+      id: ex.id,
+      name: ex.name,
+      sets: ex.sets.map(set => ({
+        id: set.id,
+        reps: Number(set.reps) || 0,
+        weight: parseFloat(set.weight) || 0,
+      })),
+      defaultRestSeconds: ex.defaultRestSeconds,
+    }));
+
+    const templateToSave: WorkoutTemplate = {
+      id: uuid.v4() as string,
+      name: workoutName.trim(),
+      type: workoutType,
+      durationEstimate: duration ? parseInt(duration, 10) : undefined,
+      exercises: exercisesToSave,
+    };
+
+    console.log(
+      "Saving Workout Template (unit omitted):",
+      JSON.stringify(templateToSave, null, 2)
+    );
+    saveWorkoutTemplate(templateToSave);
+    savedRef.current = true;
+    clearWorkoutDraft(null);
+    Alert.alert("Success", "Workout template saved!");
+    navigation.goBack();
+  }, [
+    workoutName,
+    workoutType,
+    duration,
+    exercises,
+    navigation,
+    validateWorkout,
+    savedRef,
+  ]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={handleSaveWorkout} style={styles.saveButton}>
+          <Icon
+            name="content-save-outline"
+            size={18}
+            color={colors.buttonText}
+            style={{ marginRight: 5 }}
+          />
+          <Text style={styles.saveButtonText}>Save</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [handleSaveWorkout]);
+
+  return (
+    <View style={styles.container}>
+      <WorkoutDetailsForm
+        workoutName={workoutName}
+        workoutType={workoutType}
+        duration={duration}
+        onNameChange={setWorkoutName}
+        onTypeChange={setWorkoutType}
+        onDurationChange={setDuration}
+        workoutTypeOptions={workoutTypeOptions}
+      />
+
+      <ExerciseList
+        exercises={exercises} // Use mapped exercises
+        onRemoveExercise={removeExercise}
+        onAddSet={addSet}
+        onRemoveSet={removeSet}
+        onRepsChange={updateReps}
+        onWeightChange={updateWeight}
+        onUnitChange={updateUnit}
+        onRestChange={updateRest}
+        onAddExercise={handlePresentModalPress}
+        // Props required by ExerciseList as seen in ActiveWorkoutScreen
+        getExerciseStatus={getExerciseStatusForTemplate}
+        currentExerciseIndex={-1} // No current exercise in create mode
+        onSelectExercise={() => {}} // No selection logic in create mode
+        disabled={false} // Not disabled in create mode
+      />
+
+      <AddExerciseModal
+        ref={addExerciseModalRef}
+        onClose={() => {}}
+        onAddExercises={handleAddExercisesFromModal}
+        allExercises={DUMMY_EXERCISES}
+      />
+    </View>
+  );
+};
+
+export default CreateWorkoutScreen;
+
 const getStyles = (colors: ScreenColors) =>
   StyleSheet.create({
     container: {
@@ -315,306 +501,3 @@ const getStyles = (colors: ScreenColors) =>
       marginLeft: 5,
     },
   });
-
-const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
-  const { colors, preferences } = useTheme();
-  const styles = useMemo(() => getStyles(colors), [colors]);
-  const defaultUnit = preferences.defaultWeightUnit;
-
-  const [workoutName, setWorkoutName] = useState("");
-  const [workoutType, setWorkoutType] = useState<string | null>(null);
-  const [duration, setDuration] = useState("");
-  const [addedExercises, setAddedExercises] = useState<WorkoutExercise[]>([]);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-
-  const savedRef = useRef(false);
-  const addExerciseModalRef = useRef<BottomSheetModal>(null);
-
-  const {
-    exercises,
-    addExercises,
-    removeExercise,
-    addSet,
-    removeSet,
-    updateReps,
-    updateWeight,
-    updateUnit,
-    updateRest,
-  } = useExerciseManagement({
-    defaultUnit,
-  });
-
-  const { hasUnsavedChanges } = useWorkoutDraft({
-    workoutName,
-    workoutType,
-    duration,
-    addedExercises: exercises,
-  });
-
-  const { validateWorkout } = useWorkoutValidation({
-    workoutName,
-    exercises,
-  });
-
-  const getExerciseStatusForTemplate = useCallback(
-    (exercise: ActiveWorkoutExercise): ExerciseStatus => {
-      // In template creation, exercises don't have an active status
-      return "not-started";
-    },
-    []
-  );
-
-  const handlePresentModalPress = useCallback(() => {
-    addExerciseModalRef.current?.present();
-  }, []);
-
-  useEffect(() => {
-    if (!isInitialLoad) {
-      setIsInitialLoad(false);
-    }
-  }, [workoutName, workoutType, duration, addedExercises, isInitialLoad]);
-
-  useEffect(() => {
-    const draft = getWorkoutDraft(null);
-    if (draft) {
-      console.log("Found Create New draft:", draft);
-      Alert.alert(
-        "Resume Draft?",
-        "You have an unsaved workout draft. Resume editing?",
-        [
-          {
-            text: "Discard Draft",
-            style: "destructive",
-            onPress: () => {
-              clearWorkoutDraft(null);
-              setIsInitialLoad(false);
-            },
-          },
-          {
-            text: "Resume",
-            onPress: () => {
-              setWorkoutName(draft.name);
-              setWorkoutType(draft.type);
-              setDuration(draft.durationEstimate?.toString() || "");
-              const exercisesWithSetIdsAndUnits = draft.exercises.map(ex => ({
-                ...ex,
-                sets: ex.sets.map(set => ({
-                  ...set,
-                  id: set.id || (uuid.v4() as string),
-                  weight: (set.weight || 0).toString(),
-                  unit: (set as any).unit || defaultUnit,
-                })),
-                defaultRestSeconds: ex.defaultRestSeconds,
-              }));
-              setAddedExercises(exercisesWithSetIdsAndUnits);
-              setIsInitialLoad(false);
-            },
-          },
-        ],
-        { cancelable: false }
-      );
-    } else {
-      setIsInitialLoad(false);
-    }
-    savedRef.current = false;
-  }, [defaultUnit]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("beforeRemove", e => {
-      if (!hasUnsavedChanges || savedRef.current || isInitialLoad) return;
-      e.preventDefault();
-      const currentDraft: WorkoutDraft = {
-        templateId: null,
-        name: workoutName,
-        type: workoutType,
-        durationEstimate: duration ? parseInt(duration, 10) : undefined,
-        exercises: addedExercises.map(ex => ({
-          instanceId: ex.instanceId,
-          id: ex.id,
-          name: ex.name,
-          sets: ex.sets.map(set => ({
-            id: set.id,
-            reps: set.reps,
-            weight: set.weight,
-          })),
-          defaultRestSeconds: ex.defaultRestSeconds,
-        })),
-        timestamp: Date.now(),
-      };
-      saveWorkoutDraft(currentDraft);
-      console.log("Draft saved on navigating away.");
-      navigation.dispatch(e.data.action);
-    });
-    return unsubscribe;
-  }, [
-    navigation,
-    hasUnsavedChanges,
-    isInitialLoad,
-    workoutName,
-    workoutType,
-    duration,
-    addedExercises,
-  ]);
-
-  const defaultReps = 12;
-  const defaultWeight = 0;
-  const defaultSetCount = 3;
-
-  const createDefaultSets = useCallback((): WorkoutSet[] => {
-    const sets: WorkoutSet[] = [];
-    for (let i = 0; i < defaultSetCount; i++) {
-      sets.push({
-        id: uuid.v4() as string,
-        reps: defaultReps,
-        weight: defaultWeight.toString(),
-        unit: defaultUnit,
-      });
-    }
-    return sets;
-  }, [defaultUnit]);
-
-  const handleAddExercisesFromModal = useCallback(
-    (selectedExercises: Exercise[]) => {
-      const newWorkoutExercises: WorkoutExercise[] = selectedExercises.map(
-        ex => ({
-          ...ex,
-          instanceId: uuid.v4() as string,
-          sets: createDefaultSets(),
-          defaultRestSeconds: DEFAULT_REST_DURATION,
-        })
-      );
-
-      addExercises(newWorkoutExercises);
-    },
-    [createDefaultSets, addExercises]
-  );
-
-  const handleSaveWorkout = useCallback(() => {
-    if (!validateWorkout()) return;
-
-    const exercisesToSave: WorkoutTemplateExercise[] = exercises.map(ex => ({
-      instanceId: ex.instanceId,
-      id: ex.id,
-      name: ex.name,
-      sets: ex.sets.map(set => ({
-        id: set.id,
-        reps: Number(set.reps) || 0,
-        weight: parseFloat(set.weight) || 0,
-      })),
-      defaultRestSeconds: ex.defaultRestSeconds,
-    }));
-
-    const templateToSave: WorkoutTemplate = {
-      id: uuid.v4() as string,
-      name: workoutName.trim(),
-      type: workoutType,
-      durationEstimate: duration ? parseInt(duration, 10) : undefined,
-      exercises: exercisesToSave,
-    };
-
-    console.log(
-      "Saving Workout Template (unit omitted):",
-      JSON.stringify(templateToSave, null, 2)
-    );
-    saveWorkoutTemplate(templateToSave);
-    savedRef.current = true;
-    clearWorkoutDraft(null);
-    Alert.alert("Success", "Workout template saved!");
-    navigation.goBack();
-  }, [
-    workoutName,
-    workoutType,
-    duration,
-    exercises,
-    navigation,
-    validateWorkout,
-    savedRef,
-  ]);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity onPress={handleSaveWorkout} style={styles.saveButton}>
-          <Icon
-            name="content-save-outline"
-            size={18}
-            color={colors.buttonText}
-            style={{ marginRight: 5 }}
-          />
-          <Text style={styles.saveButtonText}>Save</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, handleSaveWorkout, styles]);
-
-  // Map exercises for ExerciseList
-  const exercisesForList: ActiveWorkoutExercise[] = useMemo(() => {
-    return exercises.map(ex => ({
-      ...ex,
-      sets: ex.sets.map(set => ({
-        ...set,
-        completed: false, // Default for template screen
-        // Ensure other fields of ActiveWorkoutSet if necessary, like restTakenSeconds
-      })),
-    }));
-  }, [exercises]);
-
-  return (
-    <View style={styles.container}>
-      <WorkoutDetailsForm
-        workoutName={workoutName}
-        workoutType={workoutType}
-        duration={duration}
-        onNameChange={setWorkoutName}
-        onTypeChange={setWorkoutType}
-        onDurationChange={setDuration}
-        workoutTypeOptions={workoutTypeOptions}
-      />
-
-      <ExerciseList
-        exercises={exercisesForList} // Use mapped exercises
-        isInitialLoad={isInitialLoad}
-        onExercisesReorder={newExercises => {
-          // Need to map back or adjust useExerciseManagement to handle ActiveWorkoutExercise
-          // For now, this might cause issues if useExerciseManagement expects WorkoutExercise
-          // A proper fix would be to make useExerciseManagement also use ActiveWorkoutExercise
-          // or have ExerciseList be more flexible.
-          // Quick fix: map back, but this is not ideal.
-          const mappedBackExercises: WorkoutExercise[] = newExercises.map(
-            ex => ({
-              ...ex,
-              sets: ex.sets.map(set => {
-                const { completed, restTakenSeconds, ...restOfSet } = set;
-                return restOfSet;
-              }),
-            })
-          );
-          setAddedExercises(mappedBackExercises);
-        }}
-        onRemoveExercise={removeExercise}
-        onAddSet={addSet}
-        onRemoveSet={removeSet}
-        onRepsChange={updateReps}
-        onWeightChange={updateWeight}
-        onUnitChange={updateUnit}
-        onRestChange={updateRest}
-        onAddExercise={handlePresentModalPress}
-        // Props required by ExerciseList as seen in ActiveWorkoutScreen
-        getExerciseStatus={getExerciseStatusForTemplate}
-        currentExerciseIndex={-1} // No current exercise in create mode
-        onSelectExercise={() => {}} // No selection logic in create mode
-        disabled={false} // Not disabled in create mode
-      />
-
-      <AddExerciseModal
-        ref={addExerciseModalRef}
-        onClose={() => {}}
-        onAddExercises={handleAddExercisesFromModal}
-        allExercises={DUMMY_EXERCISES}
-      />
-    </View>
-  );
-};
-
-export default CreateWorkoutScreen;

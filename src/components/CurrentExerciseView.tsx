@@ -3,18 +3,18 @@ import { View, Text, StyleSheet } from "react-native";
 import Animated, { Layout, SequencedTransition } from "react-native-reanimated";
 import { useTheme } from "@/theme/ThemeContext";
 import SetRow from "./SetRow";
-import RestTimerUI from "./RestTimerUI"; // Import the new component
+import RestTimerUI from "./RestTimerUI";
 import {
   ActiveWorkoutExercise,
   ActiveWorkoutSet,
-} from "@/hooks/useWorkoutState"; // Import types
+} from "@/hooks/useWorkoutState";
+import { ColorPalette } from "@/theme/colors"; // For createStyles
 
 interface Props {
   exercise: ActiveWorkoutExercise;
-  exerciseIndex: number; // Pass current index
+  exerciseIndex: number;
   isResting: boolean;
   restingSetIndex: number | null;
-  // Rest Timer Props (passed down to RestTimerUI)
   isRestPromptVisible: boolean;
   restDisplaySeconds: number;
   restOvertickSeconds: number;
@@ -25,7 +25,6 @@ interface Props {
   onStartRest: () => void;
   onStopRest: () => void;
   onAdjustRestDuration: (increment: number) => void;
-  // Set Action Props
   onUpdateSetField: (
     exIndex: number,
     sIndex: number,
@@ -62,35 +61,31 @@ const CurrentExerciseView: React.FC<Props> = ({
       style={styles.currentExerciseSection}
     >
       <Text style={styles.currentExerciseTitle}>{exercise.name}</Text>
-      {/* Set Table Header */}
       <View style={styles.setTableHeader}>
         <Text style={[styles.setHeaderText, styles.setCol]}>Set</Text>
         <Text style={[styles.setHeaderText, styles.repsCol]}>Reps</Text>
         <Text style={[styles.setHeaderText, styles.weightCol]}>Weight</Text>
         <Text style={[styles.setHeaderText, styles.doneCol]}>Done</Text>
       </View>
-      {/* Sets List */}
       {exercise.sets.map((set, index) => (
         <Animated.View
-          key={set.id} // Use stable ID
+          key={set.id}
           layout={Layout.springify()}
           style={styles.setRowContainer}
         >
           <SetRow
             mode="view"
-            set={set}
+            set={set} // Already ActiveWorkoutSet
             setIndex={index}
-            setNumber={index + 1}
-            exerciseIndex={exerciseIndex} // Pass current exercise index
+            exerciseIndex={exerciseIndex}
             isResting={isResting}
             onUpdateField={onUpdateSetField}
-            onToggleComplete={onToggleSetComplete}
+            onToggleSetComplete={onToggleSetComplete}
+            // No onRemove or canRemove needed for view mode as per SetRow changes
           />
-          {/* --- Conditional Rest Timer UI --- */}
-          {/* Render RestTimerUI only for the set that triggered rest/prompt */}
           <RestTimerUI
-            isVisible={restingSetIndex === index} // Show only for the relevant set
-            isResting={isResting && restingSetIndex === index} // Pass down if *this* set is actively resting
+            isVisible={restingSetIndex === index}
+            isResting={isResting && restingSetIndex === index}
             displaySeconds={restDisplaySeconds}
             overtickSeconds={restOvertickSeconds}
             targetDuration={restTargetDuration}
@@ -107,8 +102,7 @@ const CurrentExerciseView: React.FC<Props> = ({
   );
 };
 
-// Styles (similar to original, adapted)
-const createStyles = (colors: any) =>
+const createStyles = (colors: ColorPalette) =>
   StyleSheet.create({
     currentExerciseSection: {
       paddingHorizontal: 16,
@@ -141,7 +135,6 @@ const createStyles = (colors: any) =>
     setRowContainer: {
       marginBottom: 10,
     },
-    // Add other necessary styles from original if needed
   });
 
 export default React.memo(CurrentExerciseView);

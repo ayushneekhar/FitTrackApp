@@ -131,6 +131,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.5,
     elevation: 5,
+    borderRadius: 30,
   },
   customButton: {
     width: 60,

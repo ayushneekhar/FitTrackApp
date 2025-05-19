@@ -311,6 +311,7 @@ const getStyles = (colors: ColorPalette) =>
       marginLeft: 8,
     },
     categoryScrollView: {
+      backgroundColor: colors.background,
       paddingVertical: 8,
     },
     categoryButton: {

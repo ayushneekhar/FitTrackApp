@@ -140,7 +140,6 @@ const AppNavigator = () => {
         component={CreateWorkoutScreen}
         options={{
           title: "Create Workout",
-          // Header right button is set dynamically within the screen component
         }}
       />
 

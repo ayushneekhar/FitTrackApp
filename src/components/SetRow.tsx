@@ -8,15 +8,35 @@ import {
 } from "react-native";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/theme/ThemeContext";
-import WeightUnitInput from "@/components/WeightUnitInput"; // Assuming this exists
-import { ActiveWorkoutSet } from "@/hooks/useWorkoutState"; // Import type
+import WeightUnitInput from "@/components/WeightUnitInput";
+import { ActiveWorkoutSet } from "@/hooks/useWorkoutState";
 import { WeightUnit } from "@/services/storage";
+import { ColorPalette } from "@/theme/colors";
 
-interface SetRowProps {
+// Define props using a discriminated union for clear mode-specific props
+interface BaseSetRowProps {
   set: ActiveWorkoutSet;
-  setIndex: number;
-  exerciseIndex: number; // Needed for update callback
-  isResting: boolean; // Disable inputs during rest
+  setIndex: number; // Index of the set within the exercise
+}
+
+interface EditModeSetRowProps extends BaseSetRowProps {
+  mode: "edit";
+  onRepsChange: (value: string) => void;
+  onWeightChange: (value: string) => void;
+  onUnitChange: (newUnit: WeightUnit) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+  // Props not used in edit mode, explicitly set to never
+  exerciseIndex?: never;
+  isResting?: never;
+  onUpdateField?: never;
+  onToggleComplete?: never;
+}
+
+interface ViewModeSetRowProps extends BaseSetRowProps {
+  mode: "view";
+  exerciseIndex: number; // Index of the exercise in the workout
+  isResting: boolean;
   onUpdateField: (
     exIndex: number,
     sIndex: number,
@@ -24,36 +44,72 @@ interface SetRowProps {
     value: any
   ) => void;
   onToggleComplete: (setIndex: number) => void;
-  onRemove: () => void;
-  canRemove: boolean;
-  mode: "edit" | "view";
+  // Props not used in view mode, explicitly set to never
+  onRepsChange?: never;
+  onWeightChange?: never;
+  onUnitChange?: never;
+  onRemove?: never;
+  canRemove?: never;
 }
 
-const SetRow: React.FC<SetRowProps> = ({
-  set,
-  setIndex,
-  exerciseIndex,
-  isResting,
-  onUpdateField,
-  onToggleComplete,
-  onRemove,
-  canRemove,
-  mode,
-}) => {
+type SetRowProps = EditModeSetRowProps | ViewModeSetRowProps;
+
+const SetRow: React.FC<SetRowProps> = props => {
+  const { mode, set, setIndex } = props;
   const { colors } = useTheme();
-  const styles = createStyles(colors, set.completed, isResting);
-  const isDisabled = set.completed || isResting;
+
+  const isViewMode = mode === "view";
+  const isEditMode = mode === "edit";
+
+  // Determine if inputs should be disabled based on mode and state
+  const viewModeIsDisabled =
+    isViewMode && (set.completed || (props as ViewModeSetRowProps).isResting);
+  const inputEditable = isEditMode || (isViewMode && !viewModeIsDisabled);
+
+  // Pass relevant disabled state for styling
+  const styles = createStyles(
+    colors,
+    set.completed,
+    isViewMode && (props as ViewModeSetRowProps).isResting
+  );
 
   const handleRepsChange = (value: string) => {
-    onUpdateField(exerciseIndex, setIndex, "reps", value);
+    if (isEditMode) {
+      (props as EditModeSetRowProps).onRepsChange(value);
+    } else if (isViewMode) {
+      (props as ViewModeSetRowProps).onUpdateField(
+        (props as ViewModeSetRowProps).exerciseIndex,
+        setIndex,
+        "reps",
+        value
+      );
+    }
   };
 
   const handleWeightChange = (value: string) => {
-    onUpdateField(exerciseIndex, setIndex, "weight", value);
+    if (isEditMode) {
+      (props as EditModeSetRowProps).onWeightChange(value);
+    } else if (isViewMode) {
+      (props as ViewModeSetRowProps).onUpdateField(
+        (props as ViewModeSetRowProps).exerciseIndex,
+        setIndex,
+        "weight",
+        value
+      );
+    }
   };
 
   const handleUnitChange = (newUnit: WeightUnit) => {
-    onUpdateField(exerciseIndex, setIndex, "unit", newUnit);
+    if (isEditMode) {
+      (props as EditModeSetRowProps).onUnitChange(newUnit);
+    } else if (isViewMode) {
+      (props as ViewModeSetRowProps).onUpdateField(
+        (props as ViewModeSetRowProps).exerciseIndex,
+        setIndex,
+        "unit",
+        newUnit
+      );
+    }
   };
 
   const incrementReps = () => {
@@ -65,68 +121,75 @@ const SetRow: React.FC<SetRowProps> = ({
   };
 
   return (
-    <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
+    <View
+      style={[
+        styles.setRow,
+        isViewMode && set.completed && styles.setRowCompleted,
+      ]}
+    >
       <Text style={styles.setNumberText}>{setIndex + 1}</Text>
 
       {/* Reps Input */}
       <View style={styles.repsInputContainer}>
         <TextInput
           style={styles.setInput}
-          value={set.reps?.toString() ?? "0"} // Handle potential undefined/null
+          value={set.reps?.toString() ?? "0"}
           onChangeText={handleRepsChange}
           keyboardType="number-pad"
           selectTextOnFocus
-          editable={!isDisabled}
+          editable={inputEditable}
         />
         <TouchableOpacity
           onPress={incrementReps}
-          style={styles.decreaseReps} // Naming is confusing, this is UP/Increment
-          disabled={isDisabled}
+          style={styles.decreaseReps}
+          disabled={!inputEditable}
         >
           <Icon
             name="chevron-up"
             size={20}
-            color={isDisabled ? colors.border : colors.textSecondary}
+            color={!inputEditable ? colors.border : colors.textSecondary}
           />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={decrementReps}
-          style={styles.increaseReps} // Naming is confusing, this is DOWN/Decrement
-          disabled={isDisabled}
+          style={styles.increaseReps}
+          disabled={!inputEditable}
         >
           <Icon
             name="chevron-down"
             size={20}
-            color={isDisabled ? colors.border : colors.textSecondary}
+            color={!inputEditable ? colors.border : colors.textSecondary}
           />
         </TouchableOpacity>
       </View>
 
       {/* Weight Input & Unit Toggle */}
       <WeightUnitInput
-        weightValue={set.weight?.toString() ?? "0"} // Handle potential undefined/null
+        weightValue={set.weight?.toString() ?? "0"}
         unitValue={set.unit}
         onWeightChange={handleWeightChange}
         onUnitChange={handleUnitChange}
-        editable={!isDisabled}
+        editable={inputEditable}
       />
 
-      {/* Done Button */}
-      {mode === "view" && (
+      {/* Done Button (View Mode Only) */}
+      {isViewMode && (
         <TouchableOpacity
           style={[
             styles.setDoneButton,
             set.completed && styles.setDoneButtonCompleted,
-            isResting && styles.disabledButton, // Add disabled style for rest
+            (props as ViewModeSetRowProps).isResting && styles.disabledButton,
           ]}
-          onPress={() => onToggleComplete(setIndex)}
-          disabled={isResting} // Disable only during rest, not if completed
+          onPress={() =>
+            (props as ViewModeSetRowProps).onToggleComplete(setIndex)
+          }
+          disabled={(props as ViewModeSetRowProps).isResting}
         >
           <Icon
             name={set.completed ? "check" : "checkbox-blank-outline"}
             size={20}
             color={
-              isResting
+              (props as ViewModeSetRowProps).isResting
                 ? colors.border
                 : set.completed
                   ? colors.buttonText
@@ -136,23 +199,33 @@ const SetRow: React.FC<SetRowProps> = ({
         </TouchableOpacity>
       )}
 
-      <TouchableOpacity
-        style={styles.removeSetButton}
-        onPress={onRemove}
-        disabled={!canRemove}
-      >
-        <Icon
-          name="minus-circle-outline"
-          size={20}
-          color={canRemove ? colors.destructive : colors.border}
-        />
-      </TouchableOpacity>
+      {/* Remove Set Button (Edit Mode Only) */}
+      {isEditMode && (
+        <TouchableOpacity
+          style={styles.removeSetButton}
+          onPress={(props as EditModeSetRowProps).onRemove}
+          disabled={!(props as EditModeSetRowProps).canRemove}
+        >
+          <Icon
+            name="minus-circle-outline"
+            size={20}
+            color={
+              (props as EditModeSetRowProps).canRemove
+                ? colors.destructive
+                : colors.border
+            }
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
 
-// Styles (similar to original, adapted)
-const createStyles = (colors: any, isCompleted: boolean, isResting: boolean) =>
+const createStyles = (
+  colors: ColorPalette,
+  isCompleted: boolean,
+  isRestingInViewMode: boolean
+) =>
   StyleSheet.create({
     setRow: {
       flexDirection: "row",
@@ -199,7 +272,8 @@ const createStyles = (colors: any, isCompleted: boolean, isResting: boolean) =>
       backgroundColor: colors.primary,
     },
     setRowCompleted: {
-      opacity: 0.6,
+      // This style only makes sense in view mode
+      opacity: isCompleted ? 0.6 : 1,
     },
     decreaseReps: {
       position: "absolute",
@@ -216,13 +290,13 @@ const createStyles = (colors: any, isCompleted: boolean, isResting: boolean) =>
       padding: 5,
     },
     disabledButton: {
-      opacity: 0.5,
+      // Applied to "Done" button when resting in view mode
+      opacity: isRestingInViewMode ? 0.5 : 1,
     },
     removeSetButton: {
       paddingLeft: 10,
       paddingVertical: 5,
     },
-    // Add other necessary styles (weight col, etc.) from original if needed
   });
 
 export default React.memo(SetRow);

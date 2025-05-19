@@ -8,9 +8,10 @@ import {
 } from "react-native";
 import { useTheme } from "@/theme/ThemeContext";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
-import { WorkoutExercise } from "@/services/storage";
+import { WorkoutExercise, WeightUnit } from "@/services/storage"; // WorkoutSet is implicitly from WorkoutExercise
 import SetRow from "./SetRow";
 import { ColorPalette } from "@/theme/colors";
+import { ActiveWorkoutSet } from "@/hooks/useWorkoutState"; // Import ActiveWorkoutSet
 
 interface ExerciseCardProps {
   exercise: WorkoutExercise;
@@ -71,19 +72,27 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
       </View>
 
       <View style={styles.setsContainer}>
-        {exercise.sets.map((set, index) => (
-          <SetRow
-            mode="edit"
-            key={set.id}
-            set={set}
-            setIndex={index}
-            onRepsChange={reps => onRepsChange(set.id, reps)}
-            onWeightChange={weight => onWeightChange(set.id, weight)}
-            onUnitChange={unit => onUnitChange(set.id, unit)}
-            onRemove={() => onRemoveSet(set.id)}
-            canRemove={exercise.sets.length > 1}
-          />
-        ))}
+        {exercise.sets.map((set, index) => {
+          // Adapt WorkoutSet from storage to ActiveWorkoutSet for SetRow
+          const activeSetForEdit: ActiveWorkoutSet = {
+            ...set, // id, reps, weight, unit
+            completed: false, // Not relevant for edit mode display logic in SetRow
+            // restTakenSeconds: undefined, // Not relevant for edit mode
+          };
+          return (
+            <SetRow
+              mode="edit"
+              key={set.id}
+              set={activeSetForEdit}
+              setIndex={index}
+              onRepsChange={reps => onRepsChange(set.id, reps)}
+              onWeightChange={weight => onWeightChange(set.id, weight)}
+              onUnitChange={unit => onUnitChange(set.id, unit)}
+              onRemove={() => onRemoveSet(set.id)}
+              canRemove={exercise.sets.length > 1}
+            />
+          );
+        })}
       </View>
 
       <TouchableOpacity style={styles.addSetButton} onPress={onAddSet}>
