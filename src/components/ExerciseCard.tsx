@@ -141,7 +141,8 @@ const getStyles = (colors: ColorPalette) =>
       marginTop: 2,
     },
     removeExerciseButton: {
-      padding: 5,
+      paddingTop: 5,
+      marginLeft: 5,
     },
     setsContainer: {
       flex: 1,

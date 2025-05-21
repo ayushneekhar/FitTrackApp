@@ -80,7 +80,7 @@ const CurrentExerciseView: React.FC<Props> = ({
             exerciseIndex={exerciseIndex}
             isResting={isResting}
             onUpdateField={onUpdateSetField}
-            onToggleSetComplete={onToggleSetComplete}
+            onToggleComplete={onToggleSetComplete}
             // No onRemove or canRemove needed for view mode as per SetRow changes
           />
           <RestTimerUI

@@ -101,12 +101,15 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
 
     // --- Modified handleAddSelected to dismiss sheet ---
     const handleAddSelected = () => {
-      const selected = allExercises.filter(ex =>
-        selectedExerciseIds.has(ex.id)
-      );
+      const selected: Exercise[] = [];
+      selectedExerciseIds.forEach(id => {
+        const exercise = allExercises.find(ex => ex.id === id);
+        if (exercise) {
+          selected.push(exercise);
+        }
+      });
       onAddExercises(selected);
-      handleDismiss(); // Dismiss the sheet after adding
-      // State reset will happen via onDismiss -> onClose prop
+      handleDismiss();
     };
 
     // --- Callback when the sheet is fully dismissed ---

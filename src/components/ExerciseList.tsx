@@ -110,28 +110,10 @@ const ExerciseList: React.FC<Props> = ({
           ListEmptyComponent={
             <View style={styles.placeholderContainer}>
               <Icon name="dumbbell" size={40} color={colors.textSecondary} />
-              <Text style={styles.placeholderText}>No exercises added yet</Text>
-              <TouchableOpacity
-                style={styles.addExerciseButton}
-                onPress={onAddExercise}
-              >
-                <Icon name="plus" size={20} color={colors.primary} />
-                <Text style={styles.addExerciseButtonText}>Add Exercise</Text>
-              </TouchableOpacity>
+              <Text style={styles.placeholderText}>
+                No exercises added yet!
+              </Text>
             </View>
-          }
-          ListFooterComponent={
-            exercises.length > 0 ? (
-              <TouchableOpacity
-                style={styles.addExerciseButton}
-                onPress={onAddExercise}
-              >
-                <Icon name="plus" size={20} color={colors.primary} />
-                <Text style={styles.addExerciseButtonText}>
-                  Add More Exercises
-                </Text>
-              </TouchableOpacity>
-            ) : null
           }
         />
         {/* {exercises.map(item => renderExerciseItem({ item }))} */}
@@ -203,7 +185,7 @@ const createStyles = (colors: any) =>
       color: colors.textSecondary,
       marginTop: 2,
     },
-    exerciseListItemInProgress: {}, // Keep for potential specific styles
+    exerciseListItemInProgress: {},
     exerciseListItemCompleted: {
       opacity: 0.6,
     },
@@ -211,7 +193,6 @@ const createStyles = (colors: any) =>
       alignItems: "center",
       justifyContent: "center",
       paddingVertical: 40,
-      opacity: 0.6,
     },
     placeholderText: {
       color: colors.textSecondary,
@@ -229,6 +210,7 @@ const createStyles = (colors: any) =>
       borderWidth: 1,
       borderColor: colors.border,
       marginTop: 15,
+      marginHorizontal: 16,
     },
     addExerciseButtonText: {
       color: colors.primary,
