@@ -73,7 +73,21 @@ export interface ActiveWorkoutSession {
   startTime: number;
   accumulatedSeconds: number;
   template: WorkoutTemplate | null;
-  // Add exercises state if needed for resuming complex edits
+  // Add workout state for proper resuming
+  workoutState?: {
+    currentExerciseIndex: number;
+    exercises: Array<{
+      instanceId: string;
+      sets: Array<{
+        id: string;
+        completed: boolean;
+        reps?: number;
+        weight?: string;
+        unit?: WeightUnit;
+        restTakenSeconds?: number;
+      }>;
+    }>;
+  };
 }
 
 // --- NEW: User Preferences Interface ---

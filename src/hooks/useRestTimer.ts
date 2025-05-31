@@ -5,16 +5,10 @@ const REST_ADJUST_INCREMENT = 15;
 export const DEFAULT_REST_DURATION = 60;
 
 interface UseRestTimerProps {
-  pauseMainTimer: () => void;
-  resumeMainTimer: () => void;
   onRecordRest: (setIndex: number, restTakenSeconds: number) => void;
 }
 
-export function useRestTimer({
-  pauseMainTimer,
-  resumeMainTimer,
-  onRecordRest,
-}: UseRestTimerProps) {
+export function useRestTimer({ onRecordRest }: UseRestTimerProps) {
   const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
   const [restTimerSeconds, setRestTimerSeconds] = useState(0); // Countdown value
   const [restTimerDuration, setRestTimerDuration] = useState(0); // Target duration for current rest
@@ -25,114 +19,112 @@ export function useRestTimer({
     number | null
   >(null); // Which set index triggered the current rest UI
   const [overtickSeconds, setOvertickSeconds] = useState(0);
+  const [restStartTime, setRestStartTime] = useState<number>(0); // When rest actually started
 
   const restTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const actualRestTrackerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const actualRestTakenRef = useRef(0);
+  const restStartTimeRef = useRef<number>(0);
 
   // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       if (restTimerIntervalRef.current)
         clearInterval(restTimerIntervalRef.current);
-      if (actualRestTrackerIntervalRef.current)
-        clearInterval(actualRestTrackerIntervalRef.current);
     };
   }, []);
 
-  // Countdown/Overtick Timer Logic
+  // Timestamp-based timer logic (works in background)
   useEffect(() => {
-    if (isRestTimerRunning) {
-      restTimerIntervalRef.current = setInterval(() => {
-        setRestTimerSeconds(prev => {
-          if (prev > 0) {
-            return prev - 1; // Countdown
-          } else {
-            // Start over ticking
-            setOvertickSeconds(o => o + 1);
-            return 0; // Keep timer seconds at 0 while over ticking
-          }
-        });
-      }, 1000);
+    if (isRestTimerRunning && restStartTime > 0) {
+      const updateTimer = () => {
+        const elapsedSeconds = Math.floor((Date.now() - restStartTime) / 1000);
+
+        if (elapsedSeconds < restTimerDuration) {
+          // Still in countdown phase
+          setRestTimerSeconds(restTimerDuration - elapsedSeconds);
+          setOvertickSeconds(0);
+        } else {
+          // In overtick phase
+          setRestTimerSeconds(0);
+          setOvertickSeconds(elapsedSeconds - restTimerDuration);
+        }
+      };
+
+      updateTimer(); // Update immediately
+      restTimerIntervalRef.current = setInterval(updateTimer, 1000);
     } else {
       if (restTimerIntervalRef.current) {
         clearInterval(restTimerIntervalRef.current);
         restTimerIntervalRef.current = null;
       }
     }
+
     return () => {
       if (restTimerIntervalRef.current)
         clearInterval(restTimerIntervalRef.current);
     };
-  }, [isRestTimerRunning]);
-
-  // Actual Rest Time Tracker Logic
-  useEffect(() => {
-    if (isRestTimerRunning) {
-      actualRestTakenRef.current = 0; // Reset tracker
-      actualRestTrackerIntervalRef.current = setInterval(() => {
-        actualRestTakenRef.current += 1;
-      }, 1000);
-    } else {
-      if (actualRestTrackerIntervalRef.current) {
-        clearInterval(actualRestTrackerIntervalRef.current);
-        actualRestTrackerIntervalRef.current = null;
-      }
-    }
-    return () => {
-      if (actualRestTrackerIntervalRef.current)
-        clearInterval(actualRestTrackerIntervalRef.current);
-    };
-  }, [isRestTimerRunning]);
+  }, [isRestTimerRunning, restStartTime, restTimerDuration]);
 
   const clearRestState = useCallback(() => {
     setIsRestTimerRunning(false);
     setCurrentSetIndexForRest(null);
     setRestTimerSeconds(0);
     setOvertickSeconds(0);
+    setRestStartTime(0);
+    restStartTimeRef.current = 0;
     if (restTimerIntervalRef.current)
       clearInterval(restTimerIntervalRef.current);
-    if (actualRestTrackerIntervalRef.current)
-      clearInterval(actualRestTrackerIntervalRef.current);
-    actualRestTakenRef.current = 0;
   }, []);
 
-  // Prepare the rest timer UI after a set is completed
+  // Prepare and immediately start the rest timer after a set is completed
   const prepareRest = useCallback(
     (setIndex: number, defaultDuration: number) => {
       clearRestState(); // Ensure clean state before preparing
-      pauseMainTimer(); // Pause main timer when rest prompt appears
       setCurrentSetIndexForRest(setIndex);
       setNextRestDuration(defaultDuration);
-      // Don't start the timer yet, just show the prompt
+
+      // Auto-start the rest immediately
+      const now = Date.now();
+      setRestTimerDuration(defaultDuration);
+      setRestTimerSeconds(defaultDuration);
+      setOvertickSeconds(0);
+      setRestStartTime(now);
+      restStartTimeRef.current = now;
+      setIsRestTimerRunning(true);
     },
-    [clearRestState, pauseMainTimer]
+    [clearRestState]
   );
 
   // Start the actual rest countdown
   const startRest = useCallback(() => {
     if (currentSetIndexForRest !== null) {
+      const now = Date.now();
       setRestTimerDuration(nextRestDuration); // Set the target duration
       setRestTimerSeconds(nextRestDuration); // Start countdown from target
       setOvertickSeconds(0);
+      setRestStartTime(now);
+      restStartTimeRef.current = now;
       setIsRestTimerRunning(true);
-      // Main timer should already be paused by prepareRest
     }
   }, [currentSetIndexForRest, nextRestDuration]);
 
   // Stop the rest timer (e.g., user clicks "Start Next Set")
   const stopRest = useCallback(() => {
-    if (isRestTimerRunning && currentSetIndexForRest !== null) {
-      onRecordRest(currentSetIndexForRest, actualRestTakenRef.current);
+    if (
+      isRestTimerRunning &&
+      currentSetIndexForRest !== null &&
+      restStartTimeRef.current > 0
+    ) {
+      const actualRestTakenSeconds = Math.floor(
+        (Date.now() - restStartTimeRef.current) / 1000
+      );
+      onRecordRest(currentSetIndexForRest, actualRestTakenSeconds);
     }
     clearRestState();
-    resumeMainTimer(); // Resume main timer when rest ends
   }, [
     isRestTimerRunning,
     currentSetIndexForRest,
     onRecordRest,
     clearRestState,
-    resumeMainTimer,
   ]);
 
   const adjustRestDuration = useCallback((increment: number) => {

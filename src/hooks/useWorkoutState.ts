@@ -3,19 +3,19 @@ import uuid from "react-native-uuid";
 import {
   WorkoutTemplate,
   ActiveWorkoutSession,
-  StoredWorkoutSet,
+  WorkoutSet,
   WeightUnit,
   WorkoutTemplateExercise, // Assuming this type exists from storage
 } from "@/services/storage"; // Adjust path as needed
 import { useTheme } from "@/theme/ThemeContext"; // For default unit
 
 // --- Types (Copied from original component) ---
-interface ActiveWorkoutSet extends StoredWorkoutSet {
+export interface ActiveWorkoutSet extends WorkoutSet {
   completed: boolean;
   restTakenSeconds?: number;
 }
 
-interface ActiveWorkoutExercise {
+export interface ActiveWorkoutExercise {
   id: string; // Exercise definition ID
   instanceId: string; // Unique ID for this instance in the workout
   name: string;
@@ -23,7 +23,7 @@ interface ActiveWorkoutExercise {
   defaultRestSeconds?: number; // Store default rest
 }
 
-type ExerciseStatus = "not-started" | "in-progress" | "completed";
+export type ExerciseStatus = "not-started" | "in-progress" | "completed";
 
 // --- Hook Props ---
 interface UseWorkoutStateProps {
@@ -65,6 +65,7 @@ export function useWorkoutState({
     ): ActiveWorkoutSet[] => {
       return sets.map(set => ({
         ...set,
+        weight: set.weight.toString(), // Convert number to string for ActiveWorkoutSet
         unit: defaultUnit,
         completed: false, // Default to not completed
         restTakenSeconds: undefined,
@@ -89,7 +90,41 @@ export function useWorkoutState({
       initialName = resumeData.template.name || "Resumed Workout";
       initialTemplateId = resumeData.template.id;
       initialExercises = mapExercises(resumeData.template.exercises);
-      // TODO: Potentially restore completion status and current index from resumeData if saved
+
+      // Restore workout progress if available
+      if (resumeData.workoutState) {
+        console.log("Restoring workout progress...", resumeData.workoutState);
+        initialIndex = resumeData.workoutState.currentExerciseIndex || 0;
+
+        // Merge saved progress with template exercises
+        initialExercises = initialExercises.map(ex => {
+          const savedExercise = resumeData.workoutState?.exercises.find(
+            saved => saved.instanceId === ex.instanceId
+          );
+
+          if (savedExercise) {
+            // Restore set progress
+            const restoredSets = ex.sets.map(set => {
+              const savedSet = savedExercise.sets.find(
+                saved => saved.id === set.id
+              );
+              if (savedSet) {
+                return {
+                  ...set,
+                  completed: savedSet.completed,
+                  reps: savedSet.reps || set.reps,
+                  weight: savedSet.weight || set.weight,
+                  unit: savedSet.unit || set.unit,
+                  restTakenSeconds: savedSet.restTakenSeconds,
+                };
+              }
+              return set;
+            });
+            return { ...ex, sets: restoredSets };
+          }
+          return ex;
+        });
+      }
     } else if (initialTemplate) {
       console.log("Starting new workout from template.");
       initialName = initialTemplate.name;
@@ -129,8 +164,14 @@ export function useWorkoutState({
                   processedValue = parseInt(value, 10);
                   if (isNaN(processedValue)) processedValue = 0;
                 } else if (field === "weight") {
-                  processedValue = parseFloat(value);
-                  if (isNaN(processedValue)) processedValue = 0;
+                  // Keep weight as string to allow proper decimal input
+                  // Only clean up invalid characters but preserve decimal points
+                  processedValue = value.replace(/[^0-9.]/g, "");
+                  // Ensure only one decimal point
+                  const parts = processedValue.split(".");
+                  if (parts.length > 2) {
+                    processedValue = parts[0] + "." + parts.slice(1).join("");
+                  }
                 }
                 return { ...set, [field]: processedValue };
               }

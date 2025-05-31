@@ -7,7 +7,6 @@ import { useTheme } from "@/theme/ThemeContext";
 interface Props {
   elapsedSeconds: number;
   isRunning: boolean;
-  isResting: boolean; // To disable controls
   onToggle: () => void;
   onReset: () => void;
 }
@@ -15,12 +14,11 @@ interface Props {
 const WorkoutTimerDisplay: React.FC<Props> = ({
   elapsedSeconds,
   isRunning,
-  isResting,
   onToggle,
   onReset,
 }) => {
   const { colors } = useTheme();
-  const styles = createStyles(colors, isRunning, isResting);
+  const styles = createStyles(colors, isRunning);
 
   return (
     <View style={styles.timerSection}>
@@ -33,55 +31,32 @@ const WorkoutTimerDisplay: React.FC<Props> = ({
           style={[
             styles.timerButton,
             isRunning ? styles.timerButtonSecondary : styles.timerButtonPrimary,
-            isResting && styles.disabledButton, // Style for disabled state
           ]}
           onPress={onToggle}
-          disabled={isResting}
         >
           <Icon
             name={isRunning ? "pause" : "play"}
             size={18}
-            color={
-              isResting
-                ? colors.border
-                : isRunning
-                  ? colors.text
-                  : colors.buttonText
-            }
+            color={isRunning ? colors.text : colors.buttonText}
           />
           <Text
             style={[
               styles.timerButtonText,
-              isResting
-                ? styles.disabledButtonText
-                : isRunning
-                  ? styles.timerButtonTextSecondary
-                  : styles.timerButtonTextPrimary,
+              isRunning
+                ? styles.timerButtonTextSecondary
+                : styles.timerButtonTextPrimary,
             ]}
           >
             {isRunning ? "Pause" : "Start"}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[
-            styles.timerButton,
-            styles.timerButtonSecondary,
-            isResting && styles.disabledButton, // Style for disabled state
-          ]}
+          style={[styles.timerButton, styles.timerButtonSecondary]}
           onPress={onReset}
-          disabled={isResting}
         >
-          <Icon
-            name="backup-restore"
-            size={18}
-            color={isResting ? colors.border : colors.text}
-          />
+          <Icon name="backup-restore" size={18} color={colors.text} />
           <Text
-            style={[
-              styles.timerButtonText,
-              styles.timerButtonTextSecondary,
-              isResting ? styles.disabledButtonText : {},
-            ]}
+            style={[styles.timerButtonText, styles.timerButtonTextSecondary]}
           >
             Reset
           </Text>
@@ -91,7 +66,7 @@ const WorkoutTimerDisplay: React.FC<Props> = ({
   );
 };
 
-const createStyles = (colors: any, isRunning: boolean, isResting: boolean) =>
+const createStyles = (colors: any, isRunning: boolean) =>
   StyleSheet.create({
     timerSection: {
       padding: 16,
@@ -138,15 +113,6 @@ const createStyles = (colors: any, isRunning: boolean, isResting: boolean) =>
     },
     timerButtonTextSecondary: {
       color: colors.text,
-    },
-    disabledButton: {
-      // Add specific styles for disabled state if needed
-      opacity: 0.5,
-      // backgroundColor: colors.background, // Example
-    },
-    disabledButtonText: {
-      // Add specific styles for disabled text if needed
-      color: colors.border, // Example
     },
   });
 

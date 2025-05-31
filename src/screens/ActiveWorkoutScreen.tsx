@@ -59,8 +59,6 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   });
 
   const rest = useRestTimer({
-    pauseMainTimer: timer.pauseTimer,
-    resumeMainTimer: timer.resumeTimer,
     // Pass workout state updater to record actual rest
     onRecordRest: (setIndex, restTakenSeconds) => {
       // Ensure we update the correct exercise index
@@ -86,14 +84,21 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         accumulatedSeconds: timer.getCurrentElapsedSeconds(), // Get latest value
         // Save the *original* template structure for resuming
         template: initialTemplate || null,
-        // TODO: Optionally save currentExerciseIndex and set completion states
-        // workoutState: {
-        //   currentExerciseIndex: workout.currentExerciseIndex,
-        //   exercises: workout.workoutExercises.map(ex => ({
-        //      instanceId: ex.instanceId,
-        //      sets: ex.sets.map(s => ({ id: s.id, completed: s.completed }))
-        //   }))
-        // }
+        // Save current workout progress
+        workoutState: {
+          currentExerciseIndex: workout.currentExerciseIndex || 0,
+          exercises: workout.workoutExercises.map(ex => ({
+            instanceId: ex.instanceId,
+            sets: ex.sets.map(set => ({
+              id: set.id,
+              completed: set.completed,
+              reps: Number(set.reps) || 0,
+              weight: set.weight || "0",
+              unit: set.unit,
+              restTakenSeconds: set.restTakenSeconds,
+            })),
+          })),
+        },
       };
       console.log("Saving session state...", sessionToSave);
       saveActiveWorkoutSession(sessionToSave);
@@ -105,8 +110,8 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
     timer.getCurrentElapsedSeconds,
     initialTemplate,
     workout.isLoading,
-    // workout.currentExerciseIndex, // Add if saving state
-    // workout.workoutExercises,    // Add if saving state
+    workout.currentExerciseIndex,
+    workout.workoutExercises,
   ]);
 
   // --- Prevent Back Navigation Hook ---
@@ -141,12 +146,18 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
 
       if (isCompleting) {
         // Set was marked *complete*
-        // timer is paused by prepareRest
+        // Auto-start the rest timer immediately
         rest.prepareRest(setIndex, nextDefaultRest ?? DEFAULT_REST_DURATION);
+
+        // Save progress after set completion
+        saveCurrentSession();
       } else {
         // Set was marked *incomplete*
         rest.clearRestState();
-        timer.resumeTimer(); // Resume main timer immediately
+        // No need to resume timer since it's not paused during rest
+
+        // Also save when sets are marked incomplete
+        saveCurrentSession();
       }
 
       // Auto-Advance Logic (Run slightly deferred to allow state updates)
@@ -160,7 +171,7 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         }
       });
     },
-    [workout, timer, rest] // Add handleNavigateExercise if used directly
+    [workout, timer, rest, saveCurrentSession] // Add saveCurrentSession dependency
   );
 
   // Handles the common logic for changing exercises
@@ -169,11 +180,11 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       if (isUIBlocked) return; // Don't navigate while resting
 
       rest.clearRestState(); // Clear any pending rest prompt
-      timer.resumeTimer(); // Ensure main timer is running
+      // No need to resume timer since it's not paused during rest
       const nextDefaultRest = navigateAction(); // Call workout hook's action
       rest.setNextRestDuration(nextDefaultRest ?? DEFAULT_REST_DURATION); // Update rest duration for the new exercise
     },
-    [rest, timer, isUIBlocked] // workout dependency is implicit via navigateAction
+    [rest, isUIBlocked] // workout dependency is implicit via navigateAction
   );
 
   const handleNextExercise = () => handleNavigateExercise(workout.nextExercise);
@@ -343,7 +354,6 @@ const ActiveWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
       <WorkoutTimerDisplay
         elapsedSeconds={timer.elapsedSeconds}
         isRunning={timer.isTimerRunning}
-        isResting={isUIBlocked} // Block controls if resting or prompt shown
         onToggle={timer.toggleTimer}
         onReset={() => {
           // Add confirmation for reset

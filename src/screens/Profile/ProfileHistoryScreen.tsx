@@ -11,7 +11,7 @@ import {
 import { useTheme } from "@/theme/ThemeContext";
 import Card from "@/components/Card";
 import WorkoutListItem from "@/components/WorkoutListItem";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { getWorkoutHistory, CompletedWorkout } from "@/services/storage";
 import { formatDuration, formatRelativeDate } from "@/utils/formatters";
 
@@ -19,6 +19,7 @@ const ProfileHistoryScreen: React.FC = () => {
   const { colors } = useTheme();
   const [history, setHistory] = useState<CompletedWorkout[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const navigation = useNavigation();
 
   const loadHistory = useCallback(() => {
     setIsLoading(true);
