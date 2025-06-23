@@ -1,5 +1,6 @@
 import { MMKV } from "react-native-mmkv";
 import uuid from "react-native-uuid";
+import { Categories } from "@/components/AddExerciseModal";
 
 // --- Type for Weight Unit ---
 export type WeightUnit = "lbs" | "kg";
@@ -116,6 +117,7 @@ const STORAGE_KEYS = {
   USER_GOALS: "userGoals",
   WORKOUT_DRAFT_CREATE: "workoutDraft_create",
   WORKOUT_DRAFT_EDIT_PREFIX: "workoutDraft_edit_",
+  CUSTOM_EXERCISES: "customExercises", // NEW: Key for custom exercises
 };
 
 // --- Helper Functions (getArray, saveArray, getObject, saveObject) ---
@@ -451,4 +453,230 @@ export const clearWorkoutDraft = (templateId: string | null): void => {
     storage.delete(`${STORAGE_KEYS.WORKOUT_DRAFT_EDIT_PREFIX}${templateId}`);
     console.log(`Edit workout draft cleared for template: ${templateId}`);
   }
+};
+
+// --- Template Export/Import Functions ---
+
+export interface TemplateExportData {
+  version: string;
+  exportDate: number;
+  templates: WorkoutTemplate[];
+}
+
+/**
+ * Exports all workout templates to a JSON string
+ * @returns JSON string containing all templates with metadata
+ */
+export const exportWorkoutTemplates = (): string => {
+  const templates = getAllWorkoutTemplates();
+  const exportData: TemplateExportData = {
+    version: "1.0.0",
+    exportDate: Date.now(),
+    templates: templates,
+  };
+  return JSON.stringify(exportData, null, 2);
+};
+
+/**
+ * Exports specific workout templates to a JSON string
+ * @param templateIds - Array of template IDs to export
+ * @returns JSON string containing selected templates with metadata
+ */
+export const exportSelectedWorkoutTemplates = (
+  templateIds: string[]
+): string => {
+  const allTemplates = getAllWorkoutTemplates();
+  const selectedTemplates = allTemplates.filter(template =>
+    templateIds.includes(template.id)
+  );
+  const exportData: TemplateExportData = {
+    version: "1.0.0",
+    exportDate: Date.now(),
+    templates: selectedTemplates,
+  };
+  return JSON.stringify(exportData, null, 2);
+};
+
+/**
+ * Imports workout templates from a JSON string
+ * @param jsonData - JSON string containing exported templates
+ * @param options - Import options
+ * @returns Object with success status, imported count, and error messages
+ */
+export const importWorkoutTemplates = (
+  jsonData: string,
+  options: {
+    overwriteExisting?: boolean;
+    generateNewIds?: boolean;
+  } = {}
+): {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  errors: string[];
+} => {
+  const { overwriteExisting = false, generateNewIds = false } = options;
+  let importedCount = 0;
+  let skippedCount = 0;
+  const errors: string[] = [];
+
+  try {
+    const importData: TemplateExportData = JSON.parse(jsonData);
+
+    // Validate import data structure
+    if (!importData.templates || !Array.isArray(importData.templates)) {
+      throw new Error(
+        "Invalid import data: missing or invalid templates array"
+      );
+    }
+
+    const existingTemplates = getAllWorkoutTemplates();
+    const existingIds = new Set(existingTemplates.map(t => t.id));
+    const existingNames = new Set(
+      existingTemplates.map(t => t.name.toLowerCase())
+    );
+
+    for (const template of importData.templates) {
+      try {
+        // Validate template structure
+        if (!template.id || !template.name || !template.exercises) {
+          errors.push(
+            `Skipped invalid template: ${template.name || "Unknown"}`
+          );
+          skippedCount++;
+          continue;
+        }
+
+        let templateToImport = { ...template };
+
+        // Handle ID conflicts
+        if (existingIds.has(template.id)) {
+          if (generateNewIds) {
+            templateToImport.id = uuid.v4() as string;
+            console.log(`Generated new ID for template: ${template.name}`);
+          } else if (!overwriteExisting) {
+            errors.push(
+              `Skipped duplicate template: ${template.name} (ID conflict)`
+            );
+            skippedCount++;
+            continue;
+          }
+        }
+
+        // Handle name conflicts by appending number
+        let finalName = templateToImport.name;
+        let counter = 1;
+        while (existingNames.has(finalName.toLowerCase())) {
+          finalName = `${templateToImport.name} (${counter})`;
+          counter++;
+        }
+        templateToImport.name = finalName;
+
+        // Ensure all exercises and sets have valid IDs
+        templateToImport.exercises.forEach(exercise => {
+          if (!exercise.instanceId) {
+            exercise.instanceId = uuid.v4() as string;
+          }
+          exercise.sets.forEach(set => {
+            if (!set.id) {
+              set.id = uuid.v4() as string;
+            }
+          });
+        });
+
+        // Save the template
+        saveWorkoutTemplate(templateToImport);
+        existingIds.add(templateToImport.id);
+        existingNames.add(templateToImport.name.toLowerCase());
+        importedCount++;
+      } catch (templateError) {
+        const errorMessage =
+          templateError instanceof Error
+            ? templateError.message
+            : String(templateError);
+        errors.push(
+          `Error importing template ${template.name}: ${errorMessage}`
+        );
+        skippedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      imported: importedCount,
+      skipped: skippedCount,
+      errors: errors,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      imported: 0,
+      skipped: 0,
+      errors: [`Failed to parse import data: ${errorMessage}`],
+    };
+  }
+};
+
+// --- NEW: Custom Exercise Interface ---
+export interface CustomExercise {
+  id: string;
+  name: string;
+  category: Categories;
+  type: string;
+  isCustom: true; // Flag to distinguish from built-in exercises
+  createdAt: number; // Timestamp when created
+}
+
+// --- NEW: Custom Exercise Functions ---
+export const getAllCustomExercises = (): CustomExercise[] => {
+  return getArray<CustomExercise>(STORAGE_KEYS.CUSTOM_EXERCISES);
+};
+
+export const saveCustomExercise = (
+  exercise: Omit<CustomExercise, "id" | "isCustom" | "createdAt">
+): CustomExercise => {
+  const customExercises = getAllCustomExercises();
+
+  const newExercise: CustomExercise = {
+    ...exercise,
+    id: `custom-${uuid.v4()}`,
+    isCustom: true,
+    createdAt: Date.now(),
+  };
+
+  customExercises.push(newExercise);
+  saveArray(STORAGE_KEYS.CUSTOM_EXERCISES, customExercises);
+
+  return newExercise;
+};
+
+export const deleteCustomExercise = (exerciseId: string): void => {
+  const customExercises = getAllCustomExercises();
+  const updatedExercises = customExercises.filter(ex => ex.id !== exerciseId);
+  saveArray(STORAGE_KEYS.CUSTOM_EXERCISES, updatedExercises);
+};
+
+export const updateCustomExercise = (
+  exerciseId: string,
+  updates: Partial<Pick<CustomExercise, "name" | "category" | "type">>
+): boolean => {
+  const customExercises = getAllCustomExercises();
+  const index = customExercises.findIndex(ex => ex.id === exerciseId);
+
+  if (index === -1) {
+    return false; // Exercise not found
+  }
+
+  customExercises[index] = {
+    ...customExercises[index],
+    ...updates,
+  };
+
+  saveArray(STORAGE_KEYS.CUSTOM_EXERCISES, customExercises);
+  return true;
+};
+
+export const clearAllCustomExercises = (): void => {
+  saveArray(STORAGE_KEYS.CUSTOM_EXERCISES, []);
 };

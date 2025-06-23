@@ -12,6 +12,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "@/navigation/AppNavigator";
 import Card from "@/components/Card";
 import { WeightUnit } from "@/services/storage"; // Import WeightUnit
+import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Settings">;
 
@@ -136,14 +137,25 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
+      </Card>
 
-        {/* Add more settings rows here if needed */}
-        {/* <View style={styles.settingRow}>
-          <Text style={styles.settingLabel}>Account</Text>
-        </View>
-        <View style={[styles.settingRow, styles.settingRowLast]}>
-          <Text style={styles.settingLabel}>Notifications</Text>
-        </View> */}
+      {/* Template Management Section */}
+      <Card style={{ paddingHorizontal: 16, marginTop: 16 }}>
+        <TouchableOpacity
+          style={[styles.settingRow, styles.settingRowLast]}
+          onPress={() => navigation.navigate("TemplateManagement")}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Icon
+              name="download-outline"
+              size={20}
+              color={colors.primary}
+              style={{ marginRight: 12 }}
+            />
+            <Text style={styles.settingLabel}>Template Management</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
       </Card>
     </View>
   );

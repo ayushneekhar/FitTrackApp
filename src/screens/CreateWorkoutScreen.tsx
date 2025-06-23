@@ -36,15 +36,7 @@ import {
   WeightUnit,
   WorkoutExercise,
 } from "@/services/storage";
-import {
-  armsExercises,
-  backExercises,
-  cardioExercises,
-  chestExercises,
-  coreExercises,
-  legsExercises,
-  shouldersExercises,
-} from "@/constants/exercises";
+
 import WorkoutTypePicker from "@/components/WorkoutTypePicker";
 import uuid from "react-native-uuid";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -78,16 +70,6 @@ const workoutTypeOptions = [
   "Endurance",
   "Cardio",
   "Custom",
-];
-
-const DUMMY_EXERCISES: Exercise[] = [
-  ...chestExercises,
-  ...backExercises,
-  ...legsExercises,
-  ...cardioExercises,
-  ...armsExercises,
-  ...shouldersExercises,
-  ...coreExercises,
 ];
 
 type ScreenColors = typeof lightColors; // Or define a specific interface
@@ -273,7 +255,6 @@ const CreateWorkoutScreen: React.FC<Props> = ({ navigation }) => {
         ref={addExerciseModalRef}
         onClose={() => {}}
         onAddExercises={handleAddExercisesFromModal}
-        allExercises={DUMMY_EXERCISES}
       />
     </View>
   );

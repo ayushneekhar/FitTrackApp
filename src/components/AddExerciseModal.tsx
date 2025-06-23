@@ -26,43 +26,50 @@ import {
   BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { ScrollView } from "react-native-gesture-handler";
+import CreateCustomExerciseModal from "./CreateCustomExerciseModal";
+import CustomExercisesManager from "./CustomExercisesManager";
+import { useExercises } from "@/hooks/useExercises";
+import { CustomExercise } from "@/services/storage";
+
+export const Categories = {
+  Chest: "Chest",
+  Back: "Back",
+  Legs: "Legs",
+  Shoulders: "Shoulders",
+  Arms: "Arms",
+  Core: "Core",
+  Cardio: "Cardio",
+  Other: "Other",
+};
 
 export interface Exercise {
   id: string;
   name: string;
-  category: Categories;
+  category: string;
   type: string;
-}
-
-export const enum Categories {
-  Chest = "Chest",
-  Back = "Back",
-  Legs = "Legs",
-  Shoulders = "Shoulders",
-  Arms = "Arms",
-  Core = "Core",
-  Cardio = "Cardio",
-  Other = "Other",
 }
 
 // Update Props: remove 'visible', ref is handled by forwardRef
 interface AddExerciseModalProps {
   onClose: () => void; // Called when the sheet is dismissed
   onAddExercises: (selectedExercises: Exercise[]) => void;
-  allExercises: Exercise[];
 }
 
 // Use forwardRef to pass the ref from the parent
 const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
-  ({ onClose, onAddExercises, allExercises }, ref) => {
+  ({ onClose, onAddExercises }, ref) => {
     const { colors } = useTheme();
+    const { allExercises, addCustomExercise } = useExercises();
     const [searchText, setSearchText] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string>(
-      Categories.Chest
+      Categories.Arms
     );
     const [selectedExerciseIds, setSelectedExerciseIds] = useState<Set<string>>(
       new Set()
     );
+
+    const createCustomExerciseModalRef = useRef<BottomSheetModal>(null);
+    const customExercisesManagerModalRef = useRef<BottomSheetModal>(null);
 
     // Define snap points for the bottom sheet
     const snapPoints = useMemo(() => ["85%"], []); // Adjust as needed, e.g., ['50%', '85%']
@@ -112,12 +119,32 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
       handleDismiss();
     };
 
+    // --- Custom Exercise Handlers ---
+    const handleCreateCustomExercise = useCallback(() => {
+      createCustomExerciseModalRef.current?.present();
+    }, []);
+
+    const handleManageCustomExercises = useCallback(() => {
+      customExercisesManagerModalRef.current?.present();
+    }, []);
+
+    const handleCustomExerciseCreated = useCallback(
+      (exercise: Omit<CustomExercise, "id" | "isCustom" | "createdAt">) => {
+        const newExercise = addCustomExercise(exercise);
+        // Automatically select the new custom exercise
+        setSelectedExerciseIds(prev => new Set([...prev, newExercise.id]));
+        // Switch to the category of the new exercise
+        setSelectedCategory(newExercise.category);
+      },
+      [addCustomExercise]
+    );
+
     // --- Callback when the sheet is fully dismissed ---
     const handleSheetDismiss = useCallback(() => {
       console.log("Bottom sheet dismissed");
       // Reset state when dismissed
       setSearchText("");
-      setSelectedCategory(Categories.Chest);
+      setSelectedCategory(Categories.Arms);
       setSelectedExerciseIds(new Set());
       onClose?.(); // Call the parent's onClose handler
     }, [onClose]);
@@ -165,111 +192,159 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
     const styles = getStyles(colors);
 
     return (
-      <BottomSheetModal
-        ref={ref}
-        enableDynamicSizing={false}
-        snapPoints={snapPoints}
-        maxDynamicContentSize={Dimensions.get("window").height * 0.8}
-        onChange={index => console.log("Sheet index changed:", index)}
-        onDismiss={handleSheetDismiss}
-        enablePanDownToClose={false}
-        android_keyboardInputMode="adjustResize"
-        enableBlurKeyboardOnGesture
-        enableHandlePanningGesture
-        keyboardBehavior="interactive"
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={{ backgroundColor: colors.textSecondary }}
-        backgroundStyle={{ backgroundColor: colors.card }}
-      >
-        <BottomSheetScrollView
-          stickyHeaderIndices={[2]}
-          style={styles.contentContainer}
+      <>
+        <BottomSheetModal
+          ref={ref}
+          enableDynamicSizing={false}
+          snapPoints={snapPoints}
+          maxDynamicContentSize={Dimensions.get("window").height * 0.8}
+          onChange={index => console.log("Sheet index changed:", index)}
+          onDismiss={handleSheetDismiss}
+          enablePanDownToClose={false}
+          android_keyboardInputMode="adjustResize"
+          enableBlurKeyboardOnGesture
+          enableHandlePanningGesture
+          keyboardBehavior="interactive"
+          backdropComponent={renderBackdrop}
+          handleIndicatorStyle={{ backgroundColor: colors.textSecondary }}
+          backgroundStyle={{ backgroundColor: colors.card }}
         >
-          <BottomSheetView style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Exercises</Text>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </BottomSheetView>
-
-          {/* Search */}
-          <View style={styles.searchContainer}>
-            <Icon name="magnify" size={20} color={colors.textSecondary} />
-            <BottomSheetTextInput
-              style={styles.searchInput}
-              placeholder="Search exercises..."
-              placeholderTextColor={colors.textSecondary}
-              onChangeText={setSearchText}
-            />
-          </View>
-
-          {/* Categories - Use BottomSheetScrollView */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryScrollView} // Container style
-            contentContainerStyle={{ paddingRight: 20 }} // Ensure last item padding
+          <BottomSheetScrollView
+            stickyHeaderIndices={[2]}
+            style={styles.contentContainer}
           >
-            {(Object.keys(Categories) as Array<keyof typeof Categories>).map(
-              cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryButton,
-                    selectedCategory === cat && styles.categoryButtonSelected,
-                  ]}
-                  onPress={() => setSelectedCategory(cat)}
-                >
-                  <Text
+            <BottomSheetView style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Exercises</Text>
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </BottomSheetView>
+
+            {/* Search */}
+            <View style={styles.searchContainer}>
+              <Icon name="magnify" size={20} color={colors.textSecondary} />
+              <BottomSheetTextInput
+                style={styles.searchInput}
+                placeholder="Search exercises..."
+                placeholderTextColor={colors.textSecondary}
+                onChangeText={setSearchText}
+              />
+            </View>
+
+            {/* Custom Exercise Actions */}
+            <View style={styles.customExerciseActions}>
+              <TouchableOpacity
+                style={styles.createCustomButton}
+                onPress={handleCreateCustomExercise}
+              >
+                <Icon name="plus-circle" size={20} color={colors.primary} />
+                <Text style={styles.createCustomText}>Create Custom</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.manageCustomButton}
+                onPress={handleManageCustomExercises}
+              >
+                <Icon name="cog" size={20} color={colors.textSecondary} />
+                <Text style={styles.manageCustomText}>Manage Custom</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Categories - Use BottomSheetScrollView */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryScrollView} // Container style
+              contentContainerStyle={{ paddingRight: 20 }} // Ensure last item padding
+            >
+              {(Object.keys(Categories) as Array<keyof typeof Categories>).map(
+                cat => (
+                  <TouchableOpacity
+                    key={cat}
                     style={[
-                      styles.categoryText,
-                      selectedCategory === cat && styles.categoryTextSelected,
+                      styles.categoryButton,
+                      selectedCategory === cat && styles.categoryButtonSelected,
                     ]}
+                    onPress={() => setSelectedCategory(cat)}
                   >
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              )
-            )}
-          </ScrollView>
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        selectedCategory === cat && styles.categoryTextSelected,
+                      ]}
+                    >
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              )}
+            </ScrollView>
 
-          {/* Exercise List - Use BottomSheetFlatList */}
-          <BottomSheetFlatList
-            scrollEnabled={false}
-            data={filteredExercises}
-            renderItem={renderExerciseItem}
-            keyExtractor={item => item.id}
-            style={styles.exerciseList} // Style for the list container
-            ListEmptyComponent={
-              <Text style={styles.emptyListText}>
-                No exercises found for "{selectedCategory}"
-                {searchText ? ` matching "${searchText}"` : ""}.
+            {/* Exercise List - Use BottomSheetFlatList */}
+            <BottomSheetFlatList
+              scrollEnabled={false}
+              data={filteredExercises}
+              renderItem={renderExerciseItem}
+              keyExtractor={item => item.id}
+              style={styles.exerciseList} // Style for the list container
+              ListEmptyComponent={
+                <Text style={styles.emptyListText}>
+                  No exercises found for "{selectedCategory}"
+                  {searchText ? ` matching "${searchText}"` : ""}.
+                </Text>
+              }
+            />
+
+            {/* Footer */}
+          </BottomSheetScrollView>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.footerButton, styles.cancelButton]}
+              onPress={handleClose}
+            >
+              <Text style={[styles.buttonText, styles.cancelButtonText]}>
+                Cancel
               </Text>
-            }
-          />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.footerButton, styles.addButton]}
+              onPress={handleAddSelected}
+              disabled={selectedExerciseIds.size === 0}
+            >
+              <Text style={[styles.buttonText, styles.addButtonText]}>
+                Add Selected ({selectedExerciseIds.size})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetModal>
 
-          {/* Footer */}
-        </BottomSheetScrollView>
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.footerButton, styles.cancelButton]}
-            onPress={handleClose}
-          >
-            <Text style={[styles.buttonText, styles.cancelButtonText]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.footerButton, styles.addButton]}
-            onPress={handleAddSelected}
-            disabled={selectedExerciseIds.size === 0}
-          >
-            <Text style={[styles.buttonText, styles.addButtonText]}>
-              Add Selected ({selectedExerciseIds.size})
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </BottomSheetModal>
+        {/* Create Custom Exercise Modal */}
+        <CreateCustomExerciseModal
+          ref={createCustomExerciseModalRef}
+          onClose={() => {}}
+          onCreateExercise={handleCustomExerciseCreated}
+        />
+
+        {/* Custom Exercises Manager Modal */}
+        <BottomSheetModal
+          ref={customExercisesManagerModalRef}
+          enableDynamicSizing={false}
+          snapPoints={["80%"]}
+          maxDynamicContentSize={Dimensions.get("window").height * 0.8}
+          onDismiss={() => {}}
+          enablePanDownToClose={true}
+          backdropComponent={renderBackdrop}
+          handleIndicatorStyle={{ backgroundColor: colors.textSecondary }}
+          backgroundStyle={{ backgroundColor: colors.card }}
+        >
+          <CustomExercisesManager
+            onClose={() => customExercisesManagerModalRef.current?.dismiss()}
+          />
+        </BottomSheetModal>
+      </>
     );
   }
 );
@@ -312,6 +387,47 @@ const getStyles = (colors: ColorPalette) =>
       fontSize: 16,
       color: colors.text,
       marginLeft: 8,
+    },
+    customExerciseActions: {
+      flexDirection: "row",
+      marginVertical: 12,
+      gap: 8,
+    },
+    createCustomButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      borderRadius: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      gap: 8,
+    },
+    createCustomText: {
+      fontSize: 14,
+      color: colors.primary,
+      fontWeight: "500",
+    },
+    manageCustomButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      gap: 8,
+    },
+    manageCustomText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      fontWeight: "500",
     },
     categoryScrollView: {
       backgroundColor: colors.background,

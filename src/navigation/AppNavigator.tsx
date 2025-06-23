@@ -11,11 +11,13 @@ import WorkoutDetailsScreen from "@/screens/WorkoutDetailsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import ProfileTopTabNavigator from "./ProfileTopTabNavigator";
 import CreateWorkoutScreen from "@/screens/CreateWorkoutScreen"; // <-- Import new screen
+import TemplateManagementScreen from "@/screens/TemplateManagementScreen"; // <-- Import template management screen
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/theme/ThemeContext";
 import { NavigatorScreenParams } from "@react-navigation/native";
 import ActiveWorkoutScreen from "@/screens/ActiveWorkoutScreen";
 import EditWorkoutScreen from "@/screens/EditWokoutScreen";
+import { WorkoutTemplate, ActiveWorkoutSession } from "@/services/storage";
 import Animated, {
   FadeInLeft,
   FadeInRight,
@@ -27,6 +29,12 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<BottomTabParamList>;
   NewWorkout: undefined;
   CreateWorkout: undefined; // <-- Add CreateWorkout route
+  TemplateManagement: undefined; // <-- Add TemplateManagement route
+  ActiveWorkout: {
+    template: WorkoutTemplate | null;
+    resumeData?: ActiveWorkoutSession;
+  };
+  EditWorkout: { templateId: string };
   WorkoutDetails: { workoutId: string };
   Settings: undefined;
 };
@@ -158,6 +166,14 @@ const AppNavigator = () => {
         component={EditWorkoutScreen}
         options={{
           title: "Edit Workout",
+        }}
+      />
+
+      <Stack.Screen
+        name="TemplateManagement"
+        component={TemplateManagementScreen}
+        options={{
+          title: "Template Management",
         }}
       />
 

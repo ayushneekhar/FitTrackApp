@@ -85,6 +85,10 @@ const DashboardWorkoutsScreen: React.FC = () => {
     navigation.navigate("CreateWorkout");
   };
 
+  const navigateToTemplateManagement = () => {
+    navigation.navigate("TemplateManagement");
+  };
+
   // --- Styles ---
   const styles = StyleSheet.create({
     container: {
@@ -124,6 +128,33 @@ const DashboardWorkoutsScreen: React.FC = () => {
       fontSize: 16,
       fontWeight: "bold",
     },
+    actionRow: {
+      flexDirection: "row",
+      marginHorizontal: 16,
+      marginTop: 16,
+      gap: 8,
+    },
+    actionButton: {
+      flex: 1,
+      backgroundColor: colors.card,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      alignItems: "center",
+    },
+    actionButtonSecondary: {
+      borderColor: colors.textSecondary,
+    },
+    actionButtonText: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    actionButtonTextSecondary: {
+      color: colors.textSecondary,
+    },
   });
 
   // --- Render Loading ---
@@ -143,6 +174,19 @@ const DashboardWorkoutsScreen: React.FC = () => {
       >
         <Text style={styles.createButtonText}>Create New Template</Text>
       </TouchableOpacity>
+
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.actionButtonSecondary]}
+          onPress={navigateToTemplateManagement}
+        >
+          <Text
+            style={[styles.actionButtonText, styles.actionButtonTextSecondary]}
+          >
+            Import/Export
+          </Text>
+        </TouchableOpacity>
+      </View>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}

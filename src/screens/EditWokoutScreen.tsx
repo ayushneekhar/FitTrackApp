@@ -32,18 +32,11 @@ import {
   deleteWorkoutTemplate, // Import delete function
   WorkoutExercise,
 } from "@/services/storage";
-import {
-  armsExercises,
-  backExercises,
-  cardioExercises,
-  chestExercises,
-  coreExercises,
-  legsExercises,
-  shouldersExercises,
-} from "@/constants/exercises";
+
 import WorkoutTypePicker from "@/components/WorkoutTypePicker";
 import uuid from "react-native-uuid";
 import { DEFAULT_REST_DURATION } from "@/hooks/useRestTimer";
+import { useExercises } from "@/hooks/useExercises";
 
 // Define navigation props type, expecting templateId
 type Props = NativeStackScreenProps<RootStackParamList, "EditWorkout">;
@@ -56,18 +49,9 @@ const workoutTypeOptions = [
   "Custom",
 ];
 
-const DUMMY_EXERCISES: Exercise[] = [
-  ...chestExercises,
-  ...backExercises,
-  ...legsExercises,
-  ...cardioExercises,
-  ...armsExercises,
-  ...shouldersExercises,
-  ...coreExercises,
-];
-
 const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
   const { colors, preferences } = useTheme();
+  const { allExercises } = useExercises();
   const { templateId } = route.params; // Get the ID from navigation
 
   // State
@@ -98,14 +82,13 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
           template.exercises.map(ex => ({
             id: ex.id,
             name: ex.name,
-            // Find category/type from DUMMY_EXERCISES if needed, or assume stored name is enough
+            // Find category/type from allExercises if needed, or assume stored name is enough
             // For simplicity, we might need to adjust how category/type are handled
             // Let's assume we only need id/name/sets from storage for editing state
             category:
-              DUMMY_EXERCISES.find(dex => dex.id === ex.id)?.category ||
+              allExercises.find(dex => dex.id === ex.id)?.category ||
               Categories.Other, // Fallback category
-            type:
-              DUMMY_EXERCISES.find(dex => dex.id === ex.id)?.type || "Unknown", // Fallback type
+            type: allExercises.find(dex => dex.id === ex.id)?.type || "Unknown", // Fallback type
             sets: ex.sets.map(set => ({
               ...set,
               weight: (set.weight || 0).toString(), // Ensure weight is string for input
@@ -805,7 +788,6 @@ const EditWorkoutScreen: React.FC<Props> = ({ route, navigation }) => {
         visible={isModalVisible}
         onClose={() => setIsModalVisible(false)}
         onAddExercises={handleAddExercisesFromModal}
-        allExercises={DUMMY_EXERCISES}
       />
     </>
   );
