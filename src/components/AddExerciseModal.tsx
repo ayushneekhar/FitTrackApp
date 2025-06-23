@@ -210,7 +210,7 @@ const AddExerciseModal = forwardRef<BottomSheetModal, AddExerciseModalProps>(
           backgroundStyle={{ backgroundColor: colors.card }}
         >
           <BottomSheetScrollView
-            stickyHeaderIndices={[2]}
+            stickyHeaderIndices={[3]}
             style={styles.contentContainer}
           >
             <BottomSheetView style={styles.modalHeader}>

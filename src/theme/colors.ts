@@ -5,6 +5,7 @@ export interface ColorPalette {
   primary: string;
   background: string;
   card: string;
+  surface: string;
   text: string;
   textSecondary: string;
   border: string;
@@ -21,6 +22,7 @@ export const lightColors: ColorPalette = {
   primary: "#1F1F1F", // Dark color for primary elements in light mode
   background: "#FFFFFF",
   card: "#FFFFFF",
+  surface: "#F8F8F8",
   text: "#000000",
   textSecondary: "#666666",
   border: "#EEEEEE",
@@ -36,6 +38,7 @@ export const darkColors: ColorPalette = {
   primary: "#3498db", // Example: A brighter primary for dark mode
   background: "#121212", // Common dark background
   card: "#1E1E1E", // Slightly lighter card background
+  surface: "#2A2A2A",
   text: "#EAEAEA", // Light text for dark background
   textSecondary: "#A0A0A0",
   border: "#2C2C2C",

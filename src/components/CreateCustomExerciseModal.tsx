@@ -222,7 +222,7 @@ const CreateCustomExerciseModal = forwardRef<
               name="plus"
               size={20}
               color={
-                !exerciseName.trim() ? colors.textSecondary : colors.surface
+                !exerciseName.trim() ? colors.textSecondary : colors.buttonText
               }
             />
             <Text
@@ -306,7 +306,7 @@ const getStyles = (colors: any) =>
       color: colors.text,
     },
     optionTextSelected: {
-      color: colors.surface,
+      color: colors.buttonText,
       fontWeight: "500",
     },
     createButton: {
@@ -325,7 +325,7 @@ const getStyles = (colors: any) =>
     createButtonText: {
       fontSize: 16,
       fontWeight: "600",
-      color: colors.surface,
+      color: colors.buttonText,
     },
     createButtonTextDisabled: {
       color: colors.textSecondary,
